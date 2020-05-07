@@ -1,0 +1,12 @@
+[package]
+name = "image_organizer"
+version = "0.1.0"
+authors = ["Michael Ramirez", "Hedzer Ferwerda"]
+readme = "README.md"
+edition = "2018"
+description = "A simple application to organize images into folders"
+repository = "https://github.com/ramirezmike/image_organizer"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
