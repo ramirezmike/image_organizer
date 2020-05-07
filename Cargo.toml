@@ -10,3 +10,5 @@ repository = "https://github.com/ramirezmike/image_organizer"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+orbtk = "0.3.1-alpha1"
+
