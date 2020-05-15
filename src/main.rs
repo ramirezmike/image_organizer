@@ -1,8 +1,12 @@
 use orbtk::prelude::*;
 
-// this enum is used in window update loop to pass data from events to a place where we can
+mod identifiers {
+    pub const SCREEN_SIZE_LABEL: &str = "screen_size_label";
+}
+
+// this enum is used in window update loop to pass data 
+// from events to a place where we can
 // more easily mutate parts of the window. 
-#[derive(Copy, Clone)] // Copy used in pattern match in fn update, Clone needed for Copy
 enum Action {
     Resize { width: f64, height: f64 }
 }
@@ -27,15 +31,14 @@ impl State for WindowState {
     fn update(&mut self, _: &mut Registry, context: &mut Context) {
         // "if let pattern matching" when we only want to handle one enum value 
         // in this case only want to do something when Some not None
-        if let Some(action) = self.action { 
+        if let Some(action) = &self.action { 
             match action {
                 // only handling the one Action enum value we have
                 Action::Resize { width:w, height:h } => {
                     // gets label and updates it with current resolution                        
-                    let mut child_label = context.child("HelloLabel");
-                    let label_value = child_label.get_mut::<String16>("text");
-                    label_value.clear(); 
-                    label_value.insert_str(0usize, &format!("{}x{}", w, h));
+                    let mut child_label = context.child(identifiers::SCREEN_SIZE_LABEL);
+                    child_label.set::<String16>("text", String16::from(format!("{}x{}", w, h)));
+                    child_label.set::<f64>("font_size", w * 0.15);
                 }
             }
 
@@ -57,11 +60,12 @@ impl Template for MainView {
             .child(TextBlock::create()
                              .width(0.0)
                              .height(14.0)
+                             .font_size(72.0)
                              .text("Hello World")
                              .element("text-block")
                              // this is where we hardcode an identifier to grab this textblock
                              // in the action handling to update it later
-                             .id("HelloLabel") 
+                             .id(identifiers::SCREEN_SIZE_LABEL) 
                              .vertical_alignment("start")
                              .build(build_context))
     }
@@ -83,12 +87,12 @@ fn main() {
                                 // "move" used to keep borrowed main_view_entity alive long enough
                                 handler: Rc::new(move |states_context, e| { 
                                     // here using if let pattern match again
-                                    if let WindowEvent::Resize { width:w, height:h } = e {
+                                    if let WindowEvent::Resize { width, height } = e {
                                         // gets a mutable reference to the WindowState object
                                         // in the MainView widget and inserts an Action
                                         // using the resolution we got from the event handler
                                         states_context.get_mut::<WindowState>(Entity::from(main_view_entity))
-                                                      .action(Action::Resize { width: w, height: h });
+                                                      .action(Action::Resize { width, height });
                                     }
                                     true  
                                 })
