@@ -10,5 +10,5 @@ repository = "https://github.com/ramirezmike/image_organizer"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-orbtk = { git = "https://github.com/redox-os/orbtk.git", branch = "develop" }
-
+iced = "0.1"
+iced_native = "0.2"
