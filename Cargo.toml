@@ -12,3 +12,7 @@ repository = "https://github.com/ramirezmike/image_organizer"
 [dependencies]
 iced = { git = "https://github.com/hecrj/iced" }
 iced_native = { git = "https://github.com/hecrj/iced" }
+
+[dependencies.iced_wgpu]
+features = ["image", "svg"]
+git = "https://github.com/hecrj/iced" 
