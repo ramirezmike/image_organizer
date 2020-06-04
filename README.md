@@ -19,13 +19,8 @@ A simple application to organize images into folders made in Rust.
   - Mockup of UI:
     ![Mockup](ui_mockup.jpg?raw=true "UI Mockup")
 
-##Dependencies
+## Dependencies
 Running on Ubuntu requires freetype2
 
   sudo apt install libfreetype6-dev
   export FONTCONFIG_FILE=/etc/fonts
-
-
-
-
-
