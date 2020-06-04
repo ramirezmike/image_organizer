@@ -1,7 +1,10 @@
 use iced::{ pane_grid, PaneGrid, executor, Command, Scrollable, scrollable, Length,
-            Image, Column, Row,
-            Subscription, Container, Element, Align, Application, Text, Settings };
+            Column, Row, Subscription, Container, Element, Align, Application, Text, Settings };
 use iced_native::{ keyboard, Event };
+
+mod file_io;
+mod style;
+mod image;
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -215,7 +218,7 @@ impl Content {
                                         .push(Text::new(label.to_string()).size(30));
 
                 if *show_image {
-                    scrollable = scrollable.push(load_image("images/test.jpg".to_string()));
+                    scrollable = scrollable.push(image::load_image("images/test.jpg".to_string()));
                 }
                     
                 Container::new(scrollable)
@@ -224,119 +227,6 @@ impl Content {
                     .center_y()
                     .center_x()
                     .into()
-            }
-        }
-    }
-}
-
-fn load_image<'a>(src: String) -> Container<'a, Message> {
-    Container::new(
-        // This implementation was based on the "tour" example
-        // https://github.com/hecrj/iced/blob/master/examples/tour/src/main.rs
-        // At the time, it said the following:
-        //
-        // This should go away once we unify resource loading on native platforms
-        //
-        if cfg!(target_arch = "wasm32") {
-            Image::new(src)
-        } else {
-            Image::new(format!("{}/{}", env!("CARGO_MANIFEST_DIR"), src))
-        }
-        .width(Length::Fill)  // TODO: Not sure if it would be handled here or in resize
-        .height(Length::Fill) // but it'd be good to make the images resize correctly when the window
-                              // resizes so it doesn't introduce scrolling (maybe don't put this in a 
-                              // scrollable container?)
-    )
-    .width(Length::Fill)
-    .center_x()
-}
-
-mod file_io {
-    use std::fs;
-    use std::path::Path;
-
-    pub fn get_directory_list(directory_path:&str) -> Result<Vec<String>, std::io::Error> {
-        let mut found_paths: Vec<String> = Vec::new();
-        let path = Path::new(&directory_path);
-
-        for entry in fs::read_dir(path)? {
-            let found_path = entry?.path();
-            if !found_path.is_dir() {
-                if let Some(path) = found_path.to_str() {
-                    found_paths.push(String::from(path));
-                }
-            }
-        }
-
-        Ok(found_paths)
-    }
-}
-
-//TODO: move this to another file
-mod style {
-    use iced::{container, Background, Color};
-
-    const BACKGROUND: Color = Color::from_rgb(
-        0x1F as f32 / 255.0,
-        0x24 as f32 / 255.0,
-        0x30 as f32 / 255.0,
-    );
-    const TEXT : Color = Color::from_rgb(
-        0xCB as f32 / 255.0,
-        0xCC as f32 / 255.0,
-        0xC6 as f32 / 255.0,
-    );
-
-    pub struct MainWindow { }
-    impl container::StyleSheet for MainWindow {
-        fn style(&self) -> container::Style {
-            container::Style {
-                text_color: Some(TEXT),
-                background: Some(Background::Color(BACKGROUND)),
-                border_width: 2,
-                border_color: Color {
-                    a: 0.3,
-                    ..Color::BLACK
-                },
-                ..Default::default()
-            }
-        }
-    }
-
-    pub struct ImageQueue { }
-    impl container::StyleSheet for ImageQueue {
-        fn style(&self) -> container::Style {
-            container::Style {
-                text_color: Some(TEXT),
-                background: Some(Background::Color(BACKGROUND)),
-                ..Default::default()
-            }
-        }
-    }
-
-    pub struct ImageQueueItem { }
-    impl container::StyleSheet for ImageQueueItem {
-        fn style(&self) -> container::Style {
-            container::Style {
-                text_color: Some(TEXT),
-                background: Some(Background::Color(BACKGROUND)),
-                border_width: 2,
-                border_color: Color {
-                    a: 0.3,
-                    ..Color::BLACK
-                },
-                ..Default::default()
-            }
-        }
-    }
-
-    pub struct Pane { }
-    impl container::StyleSheet for Pane {
-        fn style(&self) -> container::Style {
-            container::Style {
-                text_color: Some(TEXT),
-                background: Some(Background::Color(BACKGROUND)),
-                ..Default::default()
             }
         }
     }
