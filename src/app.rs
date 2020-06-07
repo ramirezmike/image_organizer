@@ -14,24 +14,20 @@ pub enum Message {
 
 #[derive(Debug)]
 enum AppView {
-    SidePanel {
-        label: String
-    },
-    ImageQueue { 
-        // TODO split a pane and implement bottom queue view across entire width 
-    },
-    ImageDisplay {
-        label: String,
-        show_image: bool
-    }
+    SidePanel(SidePanelState),
+    ImageQueue(ImageQueueState),
+    ImageDisplay(ImageDisplayState)
 }
 
-struct SidePanel { }
-impl SidePanel {
-    fn view(label: String, scroll: &mut scrollable::State) -> Element<Message> {
+#[derive(Debug)]
+struct SidePanelState { 
+    label: String
+}
+impl SidePanelState {
+    fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
         let scrollable = Scrollable::new(scroll)
             .align_items(Align::Start)
-            .push(Text::new(label.to_string()).size(30));
+            .push(Text::new(self.label.to_string()).size(30));
             
         Container::new(scrollable)
             .width(Length::Fill)
@@ -42,9 +38,10 @@ impl SidePanel {
     }
 }
 
-struct ImageQueue {}
-impl ImageQueue {
-    fn view(scroll: &mut scrollable::State) -> Element<Message> {
+#[derive(Debug)]
+struct ImageQueueState {}
+impl ImageQueueState {
+    fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
         let mut row = Row::<'_, Message>::new();
         match file_io::get_directory_list("images/") {
             Ok(x) => {
@@ -53,7 +50,7 @@ impl ImageQueue {
                        let column = Column::<'_, Message>::new().push(text);
 
                        r.push(Container::new(column)
-                      //.width(Length::FillPortion(1))
+                        .width(Length::Shrink)
                         .height(Length::Fill)
                         .style(style::ImageQueueItem { }))
                 })
@@ -77,14 +74,18 @@ impl ImageQueue {
     }
 }
 
-struct ImageDisplay {}
-impl ImageDisplay {
-    fn view<'a>(scroll: &'a mut scrollable::State, label: String, show_image: &bool) -> Element<'a, Message> {
+#[derive(Debug)]
+struct ImageDisplayState {
+    label: String,
+    show_image: bool
+}
+impl ImageDisplayState {
+    fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
         let mut scrollable = Scrollable::new(scroll)
                                 .align_items(Align::Start)
-                                .push(Text::new(label.to_string()).size(30));
+                                .push(Text::new(self.label.to_string()).size(30));
 
-        if *show_image {
+        if self.show_image {
             scrollable = scrollable.push(image::load_image("images/test.jpg".to_string()));
         }
             
@@ -113,10 +114,9 @@ impl Content {
 
     fn view(&mut self, _pane: pane_grid::Pane) -> Element<Message> {
         match &self.app_view {
-            AppView::SidePanel { label, .. } => SidePanel::view(label.to_string(), &mut self.scroll),
-            AppView::ImageQueue { .. } => ImageQueue::view(&mut self.scroll),
-            AppView::ImageDisplay { label, show_image } => ImageDisplay::view(&mut self.scroll, 
-                                                                                label.to_string(), &show_image)
+            AppView::SidePanel(state) => state.view(&mut self.scroll),
+            AppView::ImageQueue(state) => state.view(&mut self.scroll),
+            AppView::ImageDisplay(state) => state.view(&mut self.scroll)
         }
     }
 }
@@ -133,22 +133,22 @@ impl App {
         match event {
             keyboard::Event::CharacterReceived(character) => {
                 if let Some(x) = self.state.get_mut(&self.side_panel) {
-                    if let AppView::SidePanel { ref mut label } = &mut x.app_view { 
-                        *label = label.to_string() + &character.to_string();
+                    if let AppView::SidePanel(state) = &mut x.app_view { 
+                        state.label = state.label.to_string() + &character.to_string();
                         // TODO handle adding a tag
                     }
                 }
 
                 if let Some(x) = self.state.get_mut(&self.image_display) {
-                    if let AppView::ImageDisplay { ref mut show_image, label: _ } = &mut x.app_view { 
+                    if let AppView::ImageDisplay(state) = &mut x.app_view { 
                         // TODO handle tagging an image here
                         // currently using this to hide/show images
-                        *show_image = !*show_image;
+                        state.show_image = !state.show_image;
                     }
                 }
 
                 if let Some(x) = self.state.get_mut(&self.image_queue) {
-                    if let AppView::ImageQueue { } = &mut x.app_view { 
+                    if let AppView::ImageQueue(_)  = &mut x.app_view { 
                         // TODO handle scrolling in queue
                     }
                 }
@@ -171,18 +171,18 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (App, Command<Message>) {
-        let pane_content = Content::new(AppView::SidePanel {
+        let pane_content = Content::new(AppView::SidePanel(SidePanelState {
             label: String::from("Tags")
-        });
+        }));
         let state_and_pane = pane_grid::State::new(pane_content);
         let mut state = state_and_pane.0;
         let pane = state_and_pane.1;
 
-        let image_queue_content = Content::new(AppView::ImageQueue { });
-        let image_display_content = Content::new(AppView::ImageDisplay {
+        let image_queue_content = Content::new(AppView::ImageQueue(ImageQueueState {}));
+        let image_display_content = Content::new(AppView::ImageDisplay(ImageDisplayState {
             label: String::from("Image"),
             show_image: false // starting as false because of image load delay
-        });
+        }));
 
         let image_queue_pane;
         let image_queue_split;
@@ -225,7 +225,6 @@ impl Application for App {
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::EventOccurred(event) => {
-                println!("{:?}", event);
                 self.handle_event(event);
             }
             Message::Resized(event) => {
