@@ -1,6 +1,7 @@
-use iced::{ pane_grid, PaneGrid, executor, Command, Scrollable, scrollable, Length,
+use iced::{ pane_grid, PaneGrid, executor, Command, Scrollable, scrollable, Length, 
             Column, Row, Subscription, Container, Element, Align, Application, Text };
 use iced_native::{ keyboard, Event };
+use std::{ cmp };
 
 #[path = "style.rs"] mod style;
 #[path = "file_io.rs"] mod file_io;
@@ -39,24 +40,45 @@ impl SidePanelState {
 }
 
 #[derive(Debug)]
-struct ImageQueueState {}
+struct ImageQueueState {
+    selected_image_index: usize,
+    image_paths: Vec::<String>,
+}
 impl ImageQueueState {
+    fn new(path: &str) -> ImageQueueState {
+        let mut image_paths = file_io::get_directory_list(path).unwrap_or(Vec::<String>::new());
+        image_paths.sort_unstable();
+
+        ImageQueueState { 
+            selected_image_index: 0,
+            image_paths: image_paths
+        }
+    }
+
     fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
         let mut row = Row::<'_, Message>::new();
-        match file_io::get_directory_list("images/") {
-            Ok(x) => {
-                row = x.iter().fold(row, |r, image_path| {
-                       let text = Text::new(image_path.to_string());
-                       let column = Column::<'_, Message>::new().push(text);
 
-                       r.push(Container::new(column)
-                        .width(Length::Shrink)
-                        .height(Length::Fill)
-                        .style(style::ImageQueueItem { }))
-                })
-            }
-            Err(..) => panic!("Error getting file list")
-        };
+        let start = if self.selected_image_index < 3 { 0 } else { self.selected_image_index - 2 };
+        let end = cmp::min(self.image_paths.len(), self.selected_image_index + 10);
+        let mut item_index: usize = start;
+
+        // in lieu of horizontal scrolling, show a shifting window of directory
+        row = self.image_paths[start..end]
+                      .iter()
+                      .fold(row, |r, image_path| {
+                          let text = Text::new(image_path.to_string());
+                          let column = Column::<'_, Message>::new().push(text);
+                          let style = style::ImageQueueItem {
+                              is_selected: item_index == self.selected_image_index
+                          };
+
+                          item_index = item_index + 1;
+
+                          r.push(Container::new(column)
+                           .width(Length::Shrink)
+                           .height(Length::Fill)
+                           .style(style))
+                      });
 
         let scrollable = Scrollable::new(scroll)
                            .width(Length::Fill)
@@ -77,6 +99,7 @@ impl ImageQueueState {
 #[derive(Debug)]
 struct ImageDisplayState {
     label: String,
+    current_image_path: String,
     show_image: bool
 }
 impl ImageDisplayState {
@@ -86,7 +109,7 @@ impl ImageDisplayState {
                                 .push(Text::new(self.label.to_string()).size(30));
 
         if self.show_image {
-            scrollable = scrollable.push(image::load_image("images/test.jpg".to_string()));
+            scrollable = scrollable.push(image::load_image(self.current_image_path.clone()));
         }
             
         Container::new(scrollable)
@@ -131,6 +154,26 @@ pub struct App {
 impl App {
     fn handle_keyboard_event(self: &mut Self, event: keyboard::Event) {
         match event {
+            keyboard::Event::KeyPressed { key_code, .. } => {
+                if let Some(x) = self.state.get_mut(&self.image_queue) {
+                    if let AppView::ImageQueue(state) = &mut x.app_view { 
+                        match key_code {
+                            keyboard::KeyCode::Left => {
+                                if state.selected_image_index == 0 { 
+                                    state.selected_image_index = 0; 
+                                } else {
+                                    state.selected_image_index = state.selected_image_index - 1;
+                                }
+                            },
+                            keyboard::KeyCode::Right => {
+                                state.selected_image_index = cmp::min(state.image_paths.len() - 1, 
+                                                                      state.selected_image_index + 1);
+                            },
+                            _ => ()
+                        }
+                    }
+                }
+            }
             keyboard::Event::CharacterReceived(character) => {
                 if let Some(x) = self.state.get_mut(&self.side_panel) {
                     if let AppView::SidePanel(state) = &mut x.app_view { 
@@ -146,12 +189,6 @@ impl App {
                         state.show_image = !state.show_image;
                     }
                 }
-
-                if let Some(x) = self.state.get_mut(&self.image_queue) {
-                    if let AppView::ImageQueue(_)  = &mut x.app_view { 
-                        // TODO handle scrolling in queue
-                    }
-                }
             }
             _ => ()
         }
@@ -163,6 +200,28 @@ impl App {
             _ => ()
         }
     }
+
+    fn load_current_image(self: &mut Self) {
+        let current_path = self.get_current_image_path();
+        if let Some(x) = self.state.get_mut(&self.image_display) {
+            if let AppView::ImageDisplay(state) = &mut x.app_view { 
+                state.current_image_path = current_path;
+            }
+        }
+    }
+
+    fn get_current_image_path(self: &Self) -> String {
+        let mut result: String = "".to_string();
+
+        if let Some(x) = self.state.get(&self.image_queue) {
+            if let AppView::ImageQueue(state) = &x.app_view { 
+                result = state.image_paths[state.selected_image_index].clone();
+            }
+        }
+
+        return result;
+    }
+
 }
 
 impl Application for App {
@@ -178,9 +237,10 @@ impl Application for App {
         let mut state = state_and_pane.0;
         let pane = state_and_pane.1;
 
-        let image_queue_content = Content::new(AppView::ImageQueue(ImageQueueState {}));
+        let image_queue_content = Content::new(AppView::ImageQueue(ImageQueueState::new("images/")));
         let image_display_content = Content::new(AppView::ImageDisplay(ImageDisplayState {
             label: String::from("Image"),
+            current_image_path: "".to_string(),
             show_image: false // starting as false because of image load delay
         }));
 
@@ -231,6 +291,8 @@ impl Application for App {
                 self.state.resize(&event.split, event.ratio)
             }
         }
+
+        self.load_current_image();
 
         Command::none()
     }
