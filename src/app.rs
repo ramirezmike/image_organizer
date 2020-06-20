@@ -1,7 +1,7 @@
 use iced::{ pane_grid, PaneGrid, executor, Command, Scrollable, scrollable, Length, 
             Column, Row, Subscription, Container, Element, Align, Application, Text };
 use iced_native::{ keyboard, Event };
-use std::{ cmp };
+use std::{ cmp, collections::HashMap };
 
 #[path = "style.rs"] mod style;
 #[path = "file_io.rs"] mod file_io;
@@ -22,13 +22,26 @@ enum AppView {
 
 #[derive(Debug)]
 struct SidePanelState { 
-    label: String
+    label: String,
+    tags: HashMap<String, String>
 }
 impl SidePanelState {
     fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
-        let scrollable = Scrollable::new(scroll)
+
+        let mut scrollable = Scrollable::new(scroll)
             .align_items(Align::Start)
             .push(Text::new(self.label.to_string()).size(30));
+
+        for x in self.tags.iter() {
+            let mut viewable_text = String::from(x.0);
+            viewable_text.push_str(" - "); 
+            viewable_text.push_str(x.1); 
+            let text = Text::new(viewable_text); // TODO: fix this
+            scrollable = scrollable.push(Row::<'_, Message>::new()
+                                                    .push(Container::new(text)
+                                                    .width(Length::Fill)
+                                                    .height(Length::Shrink)));
+        }
             
         Container::new(scrollable)
             .width(Length::Fill)
@@ -99,18 +112,14 @@ impl ImageQueueState {
 #[derive(Debug)]
 struct ImageDisplayState {
     label: String,
-    current_image_path: String,
-    show_image: bool
+    current_image_path: String
 }
 impl ImageDisplayState {
     fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
-        let mut scrollable = Scrollable::new(scroll)
-                                .align_items(Align::Start)
-                                .push(Text::new(self.label.to_string()).size(30));
-
-        if self.show_image {
-            scrollable = scrollable.push(image::load_image(self.current_image_path.clone()));
-        }
+        let scrollable = Scrollable::new(scroll)
+                            .align_items(Align::Start)
+                            .push(Text::new(self.label.to_string()).size(30)) 
+                            .push(image::load_image(self.current_image_path.clone()));
             
         Container::new(scrollable)
             .width(Length::Fill)
@@ -177,16 +186,13 @@ impl App {
             keyboard::Event::CharacterReceived(character) => {
                 if let Some(x) = self.state.get_mut(&self.side_panel) {
                     if let AppView::SidePanel(state) = &mut x.app_view { 
-                        state.label = state.label.to_string() + &character.to_string();
-                        // TODO handle adding a tag
+                        state.tags.insert(character.to_string(), "test".to_string());
                     }
                 }
 
                 if let Some(x) = self.state.get_mut(&self.image_display) {
-                    if let AppView::ImageDisplay(state) = &mut x.app_view { 
+                    if let AppView::ImageDisplay(_state) = &mut x.app_view { 
                         // TODO handle tagging an image here
-                        // currently using this to hide/show images
-                        state.show_image = !state.show_image;
                     }
                 }
             }
@@ -231,7 +237,8 @@ impl Application for App {
 
     fn new(_flags: ()) -> (App, Command<Message>) {
         let pane_content = Content::new(AppView::SidePanel(SidePanelState {
-            label: String::from("Tags")
+            label: String::from("Tags"),
+            tags: HashMap::<String,String>::new()
         }));
         let state_and_pane = pane_grid::State::new(pane_content);
         let mut state = state_and_pane.0;
@@ -240,8 +247,7 @@ impl Application for App {
         let image_queue_content = Content::new(AppView::ImageQueue(ImageQueueState::new("images/")));
         let image_display_content = Content::new(AppView::ImageDisplay(ImageDisplayState {
             label: String::from("Image"),
-            current_image_path: "".to_string(),
-            show_image: false // starting as false because of image load delay
+            current_image_path: "".to_string()
         }));
 
         let image_queue_pane;
@@ -307,7 +313,7 @@ impl Application for App {
         })
         .width(Length::Fill)
         .height(Length::Fill)
-        .on_resize(Message::Resized);
+        .on_resize(10, Message::Resized);
 
         Container::new(pane_grid)
             .width(Length::Fill)
