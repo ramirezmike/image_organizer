@@ -8,6 +8,7 @@ pub struct ImageDisplayState {
     pub label: String,
     pub current_image_path: String,
 }
+
 impl ImageDisplayState {
     pub fn view<'a>(self: &'a Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
 

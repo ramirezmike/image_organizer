@@ -10,6 +10,8 @@ pub struct SidePanelState {
     pub label: String,
     pub tags: HashMap<String, String>
 }
+
+
 impl SidePanelState {
     pub fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
 

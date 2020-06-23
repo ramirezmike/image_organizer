@@ -11,6 +11,8 @@ pub struct ImageQueueState {
     pub selected_image_index: usize,
     pub image_paths: Vec::<String>,
 }
+
+
 impl ImageQueueState {
     pub fn new(path: &str) -> ImageQueueState {
         let mut image_paths = utils::file_io::get_directory_list(path).unwrap_or(Vec::<String>::new());
