@@ -26,7 +26,12 @@ impl ImageQueueState {
         ImageQueueState { 
             selected_image_index: 0,
             image_infos: image_paths.iter()
-                                    .map(|x| ImageInfo { path: x.to_string(), tags: HashMap::<char, ()>::new() })
+                                    .map(|x| 
+                                        ImageInfo { 
+                                            path: x.split(path).collect::<Vec::<_>>()[1].to_string(), 
+                                            tags: HashMap::<char, ()>::new() 
+                                        }
+                                    )
                                     .collect()
         }
     }

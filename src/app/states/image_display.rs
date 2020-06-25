@@ -5,6 +5,7 @@ use crate::app::utils;
 
 #[derive(Debug)]
 pub struct ImageDisplayState {
+    pub root_path: String,
     pub label: String,
     pub current_image_path: String,
     pub current_image_tags: Option<Vec::<char>>,
@@ -29,7 +30,7 @@ impl ImageDisplayState {
         let scrollable = Scrollable::new(scroll)
                             .align_items(Align::Start)
                             .push(Text::new(self.label.to_string()).size(30)) 
-                            .push(utils::image::load_image(self.current_image_path.clone()))
+                            .push(utils::image::load_image(self.root_path.clone() + &self.current_image_path.clone()))
                             .push(tag_row);
 
         Container::new(scrollable)
