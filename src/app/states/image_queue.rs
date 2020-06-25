@@ -1,6 +1,6 @@
 use iced::{ Scrollable, scrollable, Length, 
             Column, Row, Container, Element, Align, Text };
-use std::{ cmp };
+use std::{ cmp, collections::HashMap };
 
 use crate::app::Message;
 use crate::app::utils;
@@ -9,9 +9,14 @@ use crate::app::style;
 #[derive(Debug)]
 pub struct ImageQueueState {
     pub selected_image_index: usize,
-    pub image_paths: Vec::<String>,
+    pub image_infos: Vec::<ImageInfo>,
 }
 
+#[derive(Debug)]
+pub struct ImageInfo {
+    pub path: String,
+    pub tags: HashMap<char, ()>
+}
 
 impl ImageQueueState {
     pub fn new(path: &str) -> ImageQueueState {
@@ -20,7 +25,9 @@ impl ImageQueueState {
 
         ImageQueueState { 
             selected_image_index: 0,
-            image_paths: image_paths
+            image_infos: image_paths.iter()
+                                    .map(|x| ImageInfo { path: x.to_string(), tags: HashMap::<char, ()>::new() })
+                                    .collect()
         }
     }
 
@@ -28,14 +35,14 @@ impl ImageQueueState {
         let mut row = Row::<'_, Message>::new();
 
         let start = if self.selected_image_index < 3 { 0 } else { self.selected_image_index - 2 };
-        let end = cmp::min(self.image_paths.len(), self.selected_image_index + 10);
+        let end = cmp::min(self.image_infos.len(), self.selected_image_index + 10);
         let mut item_index: usize = start;
 
         // in lieu of horizontal scrolling, show a shifting window of directory
-        row = self.image_paths[start..end]
+        row = self.image_infos[start..end]
                       .iter()
-                      .fold(row, |r, image_path| {
-                          let text = Text::new(image_path.to_string());
+                      .fold(row, |r, image_info| {
+                          let text = Text::new(image_info.path.to_string());
                           let column = Column::<'_, Message>::new().push(text);
                           let style = style::ImageQueueItem {
                               is_selected: item_index == self.selected_image_index

@@ -64,7 +64,7 @@ impl App {
                                     }
                                 },
                                 keyboard::KeyCode::Right => {
-                                    state.selected_image_index = cmp::min(state.image_paths.len() - 1, 
+                                    state.selected_image_index = cmp::min(state.image_infos.len() - 1, 
                                                                           state.selected_image_index + 1);
                                 },
                                 _ => ()
@@ -72,20 +72,22 @@ impl App {
                         }
                     }
                     keyboard::Event::CharacterReceived(character) => {
-                        if character.is_alphabetic() && !self.does_tag_exist(&character.to_string()) {
-                            self.keyboard_state = KeyboardState::CreatingTag;
-                            let tag_input_content = content::Content::new(AppView::TagInput(TagInputState { 
-                                tag_input_value: "".to_string(),
-                                tag: character
-                            }));
+                        if character.is_alphabetic() {
+                            if !self.does_tag_exist(&character.to_string()) {
+                                self.keyboard_state = KeyboardState::CreatingTag;
+                                let tag_input_content = content::Content::new(AppView::TagInput(TagInputState { 
+                                    tag_input_value: "".to_string(),
+                                    tag: character
+                                }));
 
-                            let (pane, split) = self.state.split(pane_grid::Axis::Horizontal, 
-                                                                 &self.image_display, tag_input_content)
-                                                          .expect("Pane couldn't split");
-                            self.tag_input = Some(pane);
-                            self.state.resize(&split, 0.9);
-                        } else {
-                            // TODO here we need to add the tag to the image
+                                let (pane, split) = self.state.split(pane_grid::Axis::Horizontal, 
+                                                                     &self.image_display, tag_input_content)
+                                                              .expect("Pane couldn't split");
+                                self.tag_input = Some(pane);
+                                self.state.resize(&split, 0.9);
+                            }
+
+                            self.toggle_tag_on_current_image(&character);
                         }
                     }
                     _ => ()
@@ -103,19 +105,39 @@ impl App {
     }
 
     fn load_current_image(self: &mut Self) {
-        let current_path = self.get_current_image_path();
-        if let AppView::ImageDisplay(state) = self.get_state(self.image_display) { 
-            state.current_image_path = current_path;
+        let mut state: Option<(String, Vec::<char>)> = None;
+        if let Some((current_path, tags)) = self.get_current_image_info() {
+            state = Some((current_path, tags.iter().map(|tag| *tag.clone()).collect()));
+        }
+
+        if let AppView::ImageDisplay(display_state) = self.get_state(self.image_display) { 
+            match state {
+                Some((path, tags)) => {
+                    display_state.current_image_path = path;
+                    display_state.current_image_tags = Some(tags);
+                }
+                None => ()
+            }
         }
     }
 
-    fn get_current_image_path(self: &mut Self) -> String {
-        let mut result: String = "".to_string();
+    fn get_current_image_info(self: &mut Self) -> Option<(String, Vec::<&char>)> {
         if let AppView::ImageQueue(state) = self.get_state(self.image_queue) {
-            result = state.image_paths[state.selected_image_index].clone();
+            Some((state.image_infos[state.selected_image_index].path.clone(),
+             state.image_infos[state.selected_image_index].tags.keys().collect()))
+        } else {
+            None
         }
+    }
 
-        return result;
+    fn toggle_tag_on_current_image(self: &mut Self, key: &char) {
+        if let AppView::ImageQueue(state) = self.get_state(self.image_queue) {
+            if state.image_infos[state.selected_image_index].tags.contains_key(key) {
+                state.image_infos[state.selected_image_index].tags.remove(key);
+            } else {
+                state.image_infos[state.selected_image_index].tags.insert(key.clone(), ());
+            }
+        }
     }
 
     fn does_tag_exist(self: &mut Self, key: &String) -> bool {
@@ -142,7 +164,8 @@ impl Application for App {
         let image_queue_content = content::Content::new(AppView::ImageQueue(ImageQueueState::new("images/")));
         let image_display_content = content::Content::new(AppView::ImageDisplay(ImageDisplayState {
             label: String::from("Image"),
-            current_image_path: "".to_string()
+            current_image_path: "".to_string(),
+            current_image_tags: None
         }));
 
         let (mut state, pane) = pane_grid::State::new(pane_content);
