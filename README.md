@@ -13,8 +13,8 @@ A simple application to organize images into folders made in Rust.
     - exit application
   - Pause and resume
   - Key commands
-    - \[ \] - skip to next untagged image
-    - { } - skip to next tagged image
+    - \[] - skip to next untagged image
+    - {} - skip to next tagged image
     - Enter/RightArrow - next image 
     - LeftArrow - previous image
     - Up/Down - navigate folders?
