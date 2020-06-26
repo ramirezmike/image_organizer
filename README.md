@@ -13,14 +13,14 @@ A simple application to organize images into folders made in Rust.
     - exit application
   - Pause and resume
   - Key commands
-    [ ] - skip to next untagged image
-    { } - skip to next tagged image
-    Enter/RightArrow - next image 
-    LeftArrow - previous image
-    Up/Down - navigate folders?
-    Escape - show Menu
-    A-z - setup a tag / use tag if one has been set for key
-    Delete - tags an image to be deleted during batch job and hides it from queue
+    - [ ] - skip to next untagged image
+    - { } - skip to next tagged image
+    - Enter/RightArrow - next image 
+    - LeftArrow - previous image
+    - Up/Down - navigate folders?
+    - Escape - show Menu
+    - A-z - setup a tag / use tag if one has been set for key
+    - Delete - tags an image to be deleted during batch job and hides it from queue
   - Mockup of UI:
     ![Mockup](ui_mockup.jpg?raw=true "UI Mockup")
 
