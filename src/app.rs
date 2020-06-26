@@ -1,7 +1,7 @@
 use iced::{ pane_grid, PaneGrid, executor, Command, Length, 
             Subscription, Container, Element, Application };
 use iced_native::{ keyboard, Event };
-use std::{ cmp, collections::HashMap };
+use std::{ collections::HashMap };
 mod style;
 mod utils;
 mod content;
@@ -10,6 +10,44 @@ use states::image_queue::ImageQueueState as ImageQueueState;
 use states::image_display::ImageDisplayState as ImageDisplayState;
 use states::side_panel::SidePanelState as SidePanelState;
 use states::tag_input::TagInputState as TagInputState;
+
+
+trait GetWhere<T> { 
+    fn next(self: &Self, startin_index: usize, predicate: fn (x: &T) -> bool) -> Option<usize>;
+    fn prev(self: &Self, startin_index: usize, predicate: fn (x: &T) -> bool) -> Option<usize>;
+}
+
+impl <T> GetWhere<T> for std::vec::Vec<T> {
+    fn prev(self: &Self, i: usize, predicate: fn (x: &T) -> bool) -> Option<usize> {
+        let mut result = None;
+        if i > 0 { 
+            for index in (0..i).rev() {
+                if predicate(&self[index]) {
+                    result = Some(index);
+                    break;
+                }
+            }
+        } 
+        result
+    }
+
+    fn next(self: &Self, i: usize, predicate: fn (x: &T) -> bool) -> Option<usize> {
+        let len = self.len();
+        let mut result = None;
+        let i = i + 1;
+        if i < len { 
+            for index in i..len {
+                if predicate(&self[index]) {
+                    result = Some(index);
+                    break;
+                }
+            }
+        } 
+        result
+    }
+}
+
+
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -57,16 +95,31 @@ impl App {
                         if let AppView::ImageQueue(state) = self.get_state(self.image_queue) { 
                             match key_code {
                                 keyboard::KeyCode::Left => {
-                                    if state.selected_image_index == 0 { 
-                                        state.selected_image_index = 0; 
-                                    } else {
-                                        state.selected_image_index = state.selected_image_index - 1;
+                                    match state.image_infos.prev(state.selected_image_index, |_| true) {
+                                        Some(x) => state.selected_image_index = x,
+                                        _ => ()
                                     }
                                 },
                                 keyboard::KeyCode::Right => {
-                                    state.selected_image_index = cmp::min(state.image_infos.len() - 1, 
-                                                                          state.selected_image_index + 1);
+                                    match state.image_infos.next(state.selected_image_index, |_| true) {
+                                        Some(x) => state.selected_image_index = x,
+                                        _ => ()
+                                    }
                                 },
+                                keyboard::KeyCode::LBracket => {
+                                    match state.image_infos.prev(state.selected_image_index,
+                                                                 |x| x.tags.is_empty()) {
+                                        Some(x) => state.selected_image_index = x,
+                                        _ => ()
+                                    }
+                                },
+                                keyboard::KeyCode::RBracket => {
+                                    match state.image_infos.next(state.selected_image_index,
+                                                                 |x| x.tags.is_empty()) {
+                                        Some(x) => state.selected_image_index = x,
+                                        _ => ()
+                                    }
+                                }
                                 _ => ()
                             }
                         }
