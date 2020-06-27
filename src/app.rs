@@ -11,14 +11,13 @@ use states::image_display::ImageDisplayState as ImageDisplayState;
 use states::side_panel::SidePanelState as SidePanelState;
 use states::tag_input::TagInputState as TagInputState;
 
-
 trait GetWhere<T> { 
-    fn next(self: &Self, startin_index: usize, predicate: fn (x: &T) -> bool) -> Option<usize>;
-    fn prev(self: &Self, startin_index: usize, predicate: fn (x: &T) -> bool) -> Option<usize>;
+    fn next<F>(self: &Self, index: usize, predicate: F) -> Option<usize> where F: Fn (&T) -> bool;
+    fn prev<F>(self: &Self, index: usize, predicate: F) -> Option<usize> where F: Fn (&T) -> bool;
 }
 
 impl <T> GetWhere<T> for std::vec::Vec<T> {
-    fn prev(self: &Self, i: usize, predicate: fn (x: &T) -> bool) -> Option<usize> {
+    fn prev<F>(self: &Self, i: usize, predicate: F)  -> Option<usize> where F: Fn (&T) -> bool {
         let mut result = None;
         if i > 0 { 
             for index in (0..i).rev() {
@@ -31,7 +30,7 @@ impl <T> GetWhere<T> for std::vec::Vec<T> {
         result
     }
 
-    fn next(self: &Self, i: usize, predicate: fn (x: &T) -> bool) -> Option<usize> {
+    fn next<F>(self: &Self, i: usize, predicate: F)  -> Option<usize> where F: Fn (&T) -> bool {
         let len = self.len();
         let mut result = None;
         let i = i + 1;
@@ -46,8 +45,6 @@ impl <T> GetWhere<T> for std::vec::Vec<T> {
         result
     }
 }
-
-
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -91,7 +88,8 @@ impl App {
         match self.keyboard_state {
             KeyboardState::Tagging => {
                 match event {
-                    keyboard::Event::KeyPressed { key_code, .. } => {
+                    keyboard::Event::KeyPressed { key_code, modifiers } => {
+                        let is_shift_pressed = &modifiers.shift;
                         if let AppView::ImageQueue(state) = self.get_state(self.image_queue) { 
                             match key_code {
                                 keyboard::KeyCode::Left => {
@@ -108,14 +106,14 @@ impl App {
                                 },
                                 keyboard::KeyCode::LBracket => {
                                     match state.image_infos.prev(state.selected_image_index,
-                                                                 |x| x.tags.is_empty()) {
+                                                                 |x| x.tags.is_empty() == !is_shift_pressed) {
                                         Some(x) => state.selected_image_index = x,
                                         _ => ()
                                     }
                                 },
                                 keyboard::KeyCode::RBracket => {
                                     match state.image_infos.next(state.selected_image_index,
-                                                                 |x| x.tags.is_empty()) {
+                                                                 |x| x.tags.is_empty() == !&modifiers.shift) {
                                         Some(x) => state.selected_image_index = x,
                                         _ => ()
                                     }
