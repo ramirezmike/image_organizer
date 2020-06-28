@@ -1,7 +1,7 @@
 use iced::{ pane_grid, PaneGrid, executor, Command, Length, Text, Column,
             Row, Subscription, Container, Element, Application };
 use iced_native::{ keyboard, Event };
-use std::{ collections::HashMap };
+use std::{ fs, collections::HashMap };
 mod style;
 mod utils;
 mod content;
@@ -142,7 +142,18 @@ impl App {
                                     Some(x) => state.selected_image_index = x,
                                     _ => ()
                                 }
-                            }
+                            },
+                            keyboard::KeyCode::Delete => {
+                                if state.selected_image_index < state.image_infos.len() {
+                                    if let Some(x) = state.image_infos.get(state.selected_image_index) {
+                                        match fs::remove_file("images/".to_string() + &x.path) {
+                                            Ok(_) => println!("Deleted {} successfully", x.path),
+                                            Err(e) => println!("{}", e),
+                                        }
+                                        state.delete_current();
+                                    }
+                                }
+                            },
                             _ => ()
                         }
                     }

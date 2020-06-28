@@ -36,6 +36,15 @@ impl ImageQueueState {
         }
     }
 
+    pub fn delete_current(self: &mut Self) {
+        if self.selected_image_index < self.image_infos.len() {
+            self.image_infos.remove(self.selected_image_index);
+            if self.selected_image_index == self.image_infos.len() {
+                self.selected_image_index = self.selected_image_index - 1;
+            } 
+        }
+    }
+
     pub fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
         let mut row = Row::<'_, Message>::new();
 
