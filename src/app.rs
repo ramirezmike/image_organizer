@@ -1,5 +1,5 @@
-use iced::{ pane_grid, PaneGrid, executor, Command, Length, 
-            Subscription, Container, Element, Application };
+use iced::{ pane_grid, PaneGrid, executor, Command, Length, Text, Column,
+            Row, Subscription, Container, Element, Application };
 use iced_native::{ keyboard, Event };
 use std::{ collections::HashMap };
 mod style;
@@ -11,6 +11,7 @@ use states::image_display::ImageDisplayState as ImageDisplayState;
 use states::side_panel::SidePanelState as SidePanelState;
 use states::tag_input::TagInputState as TagInputState;
 
+// TODO : Move this into a separate file
 trait GetWhere<T> { 
     fn next<F>(self: &Self, index: usize, predicate: F) -> Option<usize> where F: Fn (&T) -> bool;
     fn prev<F>(self: &Self, index: usize, predicate: F) -> Option<usize> where F: Fn (&T) -> bool;
@@ -68,7 +69,13 @@ enum KeyboardState {
     CreatingTag
 }
 
+enum AppState {
+    Menu,
+    Tagging
+}
+
 pub struct App {
+    app_state: AppState,
     state: pane_grid::State<content::Content>,
     side_panel: pane_grid::Pane,
     image_queue: pane_grid::Pane,
@@ -85,43 +92,67 @@ impl App {
     }
 
     fn handle_keyboard_event(self: &mut Self, event: keyboard::Event) {
+        if let keyboard::Event::KeyPressed { key_code, modifiers } = event {
+            let is_shift_pressed = &modifiers.shift;
+            match self.app_state {
+                AppState::Menu => { 
+                    match key_code {
+                        keyboard::KeyCode::Escape => {
+                            self.app_state = AppState::Tagging 
+                        }
+                        keyboard::KeyCode::Q => {
+                            // TODO: exit more gracefully
+                            assert!(1 == 0); // ¯\_(ツ)_/¯
+                        }
+                        _ => ()
+                    }
+                }
+                AppState::Tagging => { 
+                    match key_code {
+                        keyboard::KeyCode::Escape => {
+                            self.app_state = AppState::Menu
+                        }
+                        _ => ()
+                    }
+
+                    if let AppView::ImageQueue(state) = self.get_state(self.image_queue) { 
+                        match key_code {
+                            keyboard::KeyCode::Left => {
+                                match state.image_infos.prev(state.selected_image_index, |_| true) {
+                                    Some(x) => state.selected_image_index = x,
+                                    _ => ()
+                                }
+                            },
+                            keyboard::KeyCode::Right => {
+                                match state.image_infos.next(state.selected_image_index, |_| true) {
+                                    Some(x) => state.selected_image_index = x,
+                                    _ => ()
+                                }
+                            },
+                            keyboard::KeyCode::LBracket => {
+                                match state.image_infos.prev(state.selected_image_index,
+                                                             |x| x.tags.is_empty() == !is_shift_pressed) {
+                                    Some(x) => state.selected_image_index = x,
+                                    _ => ()
+                                }
+                            },
+                            keyboard::KeyCode::RBracket => {
+                                match state.image_infos.next(state.selected_image_index,
+                                                             |x| x.tags.is_empty() == !&modifiers.shift) {
+                                    Some(x) => state.selected_image_index = x,
+                                    _ => ()
+                                }
+                            }
+                            _ => ()
+                        }
+                    }
+                }
+            }
+        }
+
         match self.keyboard_state {
             KeyboardState::Tagging => {
                 match event {
-                    keyboard::Event::KeyPressed { key_code, modifiers } => {
-                        let is_shift_pressed = &modifiers.shift;
-                        if let AppView::ImageQueue(state) = self.get_state(self.image_queue) { 
-                            match key_code {
-                                keyboard::KeyCode::Left => {
-                                    match state.image_infos.prev(state.selected_image_index, |_| true) {
-                                        Some(x) => state.selected_image_index = x,
-                                        _ => ()
-                                    }
-                                },
-                                keyboard::KeyCode::Right => {
-                                    match state.image_infos.next(state.selected_image_index, |_| true) {
-                                        Some(x) => state.selected_image_index = x,
-                                        _ => ()
-                                    }
-                                },
-                                keyboard::KeyCode::LBracket => {
-                                    match state.image_infos.prev(state.selected_image_index,
-                                                                 |x| x.tags.is_empty() == !is_shift_pressed) {
-                                        Some(x) => state.selected_image_index = x,
-                                        _ => ()
-                                    }
-                                },
-                                keyboard::KeyCode::RBracket => {
-                                    match state.image_infos.next(state.selected_image_index,
-                                                                 |x| x.tags.is_empty() == !&modifiers.shift) {
-                                        Some(x) => state.selected_image_index = x,
-                                        _ => ()
-                                    }
-                                }
-                                _ => ()
-                            }
-                        }
-                    }
                     keyboard::Event::CharacterReceived(character) => {
                         if character.is_alphabetic() {
                             if !self.does_tag_exist(&character.to_string()) {
@@ -234,6 +265,7 @@ impl Application for App {
         state.resize(&image_display_split, 0.1);
 
         (App { 
+            app_state: AppState::Menu,
             state: state,
             side_panel: pane,
             image_queue: image_queue_pane,
@@ -300,17 +332,33 @@ impl Application for App {
     }
 
     fn view(&mut self) -> Element<Message> {
-        let pane_grid = PaneGrid::new(&mut self.state, |pane, content, _focus| {
-            content.view(pane)
-        })
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .on_resize(10, Message::Resized);
+        match self.app_state {
+            AppState::Menu => {
+                let column = Column::<'_, Message>::new()
+                                .push(Row::<'_, Message>::new()
+                                    .push(Container::new(Text::new("Q - Quit"))))
+                                .push(Row::<'_, Message>::new()
+                                    .push(Container::new(Text::new("Escape - Resume"))));
+                Container::new(column)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(style::MainWindow { })
+                    .into()
+            }
+            AppState::Tagging => {
+                let pane_grid = PaneGrid::new(&mut self.state, |pane, content, _focus| {
+                    content.view(pane)
+                })
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .on_resize(10, Message::Resized);
 
-        Container::new(pane_grid)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(style::MainWindow { })
-            .into()
+                Container::new(pane_grid)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(style::MainWindow { })
+                    .into()
+            }
+        }
     }
 }
