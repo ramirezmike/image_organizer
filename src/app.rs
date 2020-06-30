@@ -1,7 +1,7 @@
 use iced::{ pane_grid, PaneGrid, executor, Command, Length, Text, Column,
-            Row, Subscription, Container, Element, Application };
+            Row, Subscription, Container, Element, Application, Radio };
 use iced_native::{ keyboard, Event };
-use std::{ fs, collections::HashMap };
+use std::{ fs, collections::HashMap, path, os::unix, env };
 mod style;
 mod utils;
 mod content;
@@ -10,6 +10,8 @@ use states::image_queue::ImageQueueState as ImageQueueState;
 use states::image_display::ImageDisplayState as ImageDisplayState;
 use states::side_panel::SidePanelState as SidePanelState;
 use states::tag_input::TagInputState as TagInputState;
+
+const TEST_DIRECTORY: &str = "images/";
 
 // TODO : Move this into a separate file
 trait GetWhere<T> { 
@@ -47,12 +49,33 @@ impl <T> GetWhere<T> for std::vec::Vec<T> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrganizeMode {
+    Copy,
+    Move,
+    Link,
+}
+
+impl OrganizeMode {
+    // TODO force this to be the same size as the number of enum variants
+    const MODES: [OrganizeMode; 3] = [OrganizeMode::Copy, OrganizeMode::Move, OrganizeMode::Link];
+
+    pub fn next(self: &mut Self) {
+        if let Some(mut current_mode) = OrganizeMode::MODES.iter().position(|x| x == self) {
+            current_mode = current_mode + 1;
+            if current_mode > 2 { current_mode = 0 }
+            *self = OrganizeMode::MODES[current_mode];
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Message {
     EventOccurred(Event),
     TextInputChanged(String),
     TextInputSubmitted,
-    Resized(pane_grid::ResizeEvent)
+    Resized(pane_grid::ResizeEvent),
+    SelectedOrganizeMode(OrganizeMode)
 }
 
 #[derive(Debug)]
@@ -61,6 +84,50 @@ pub enum AppView {
     ImageQueue(ImageQueueState),
     ImageDisplay(ImageDisplayState),
     TagInput(TagInputState),
+}
+
+impl AppView {
+    fn side_panel(self: &Self) -> &SidePanelState {
+        match self {
+            AppView::SidePanel(x) => x,
+            _ => panic!("Incorrect variant requested")
+        }
+    }
+
+    fn side_panel_mut(self: &mut Self) -> &mut SidePanelState {
+        match self {
+            AppView::SidePanel(x) => x,
+            _ => panic!("Incorrect variant requested")
+        }
+    }
+
+    fn image_queue(self: &Self) -> &ImageQueueState {
+        match self {
+            AppView::ImageQueue(x) => x,
+            _ => panic!("Incorrect variant requested")
+        }
+    }
+
+    fn tag_input_mut(self: &mut Self) -> &mut TagInputState {
+        match self {
+            AppView::TagInput(x) => x,
+            _ => panic!("Incorrect variant requested")
+        }
+    }
+
+    fn image_display_mut(self: &mut Self) -> &mut ImageDisplayState {
+        match self {
+            AppView::ImageDisplay(x) => x,
+            _ => panic!("Incorrect variant requested")
+        }
+    }
+
+    fn image_queue_mut(self: &mut Self) -> &mut ImageQueueState {
+        match self {
+            AppView::ImageQueue(x) => x,
+            _ => panic!("Incorrect variant requested")
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -81,41 +148,130 @@ pub struct App {
     image_queue: pane_grid::Pane,
     image_display: pane_grid::Pane,
     tag_input: Option<pane_grid::Pane>,
-    keyboard_state: KeyboardState
+    keyboard_state: KeyboardState,
+    organize_mode: OrganizeMode 
 }
 
 impl App {
-    fn get_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
+    fn get_mut_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
         &mut self.state.get_mut(&pane)
                        .expect("Image Queue State missing")
                        .app_view
     }
 
-    fn handle_keyboard_event(self: &mut Self, event: keyboard::Event) {
-        if let keyboard::Event::KeyPressed { key_code, modifiers } = event {
-            let is_shift_pressed = &modifiers.shift;
-            match self.app_state {
-                AppState::Menu => { 
-                    match key_code {
-                        keyboard::KeyCode::Escape => {
-                            self.app_state = AppState::Tagging 
-                        }
-                        keyboard::KeyCode::Q => {
-                            // TODO: exit more gracefully
-                            assert!(1 == 0); // ¯\_(ツ)_/¯
-                        }
-                        _ => ()
-                    }
-                }
-                AppState::Tagging => { 
-                    match key_code {
-                        keyboard::KeyCode::Escape => {
-                            self.app_state = AppState::Menu
-                        }
-                        _ => ()
+    fn get_state(self: &Self, pane: pane_grid::Pane) -> &AppView {
+        &self.state.get(&pane)
+                   .expect("Image Queue State missing")
+                   .app_view
+    }
+
+    fn run_organize_process(self: &Self) -> Result<(), std::io::Error> {
+        let side_panel = self.get_state(self.side_panel).side_panel();
+        let image_queue = self.get_state(self.image_queue).image_queue();
+
+        let mut store = HashMap::<String, Vec::<String>>::new();
+        store = image_queue.image_infos.iter().fold(store, |mut acc, image_info| {
+            for tag in image_info.tags.iter() {
+                let tag = &tag.0.to_string();
+                if let Some(tag_label) = side_panel.tags.get(tag) {
+                    if !acc.contains_key(tag_label) {
+                        acc.insert(tag_label.to_string(), Vec::<String>::new());
                     }
 
-                    if let AppView::ImageQueue(state) = self.get_state(self.image_queue) { 
+                    if let Some(tag_store) = acc.get_mut(tag_label) {
+                        tag_store.push(image_info.path.clone());
+                    }
+                }
+            }
+
+            acc
+        });
+
+        let current_dir = env::current_dir()?;
+        for key in store.keys() {
+            let current_directory = TEST_DIRECTORY.to_string() + key;
+            if !path::Path::new(&current_directory).exists() {
+                if let Err(e) = fs::create_dir_all(&current_directory) {
+                    println!("Error creating {}: {}", current_directory, e);
+                    continue; // try next folder
+                }
+            }
+
+            for file in &store[key] {
+                let mut source = current_dir.clone();
+                source.push("images");
+                source.push(file);
+                match self.organize_mode {
+                    OrganizeMode::Copy => {
+                        match fs::copy(source,
+                                       &(current_directory.to_string() 
+                                           + "/" + file)) {
+                            Ok(_) => println!("{} copied", file),
+                            Err(e) => println!("Error copying {}: {}", file, e)
+                        }
+                    }
+                    OrganizeMode::Move => {
+                        match fs::copy(&source,
+                                       &(current_directory.to_string() 
+                                           + "/" + file)) {
+                            Ok(_) => println!("{} copied", file),
+                            Err(e) => println!("Error copying {}: {}", file, e)
+                        }
+                        match fs::remove_file(&source) {
+                            Ok(_) => println!("Original {}", file),
+                            Err(e) => println!("{}", e),
+                        }
+                    }
+                    OrganizeMode::Link => {
+                        match unix::fs::symlink(source,
+                                            &(current_directory.to_string() 
+                                                + "/" + file)) {
+                            Ok(_) => println!("{} linked", file),
+                            Err(e) => println!("Error linking {}: {}", file, e)
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn handle_keyboard_event(self: &mut Self, event: keyboard::Event) {
+        match event {
+            keyboard::Event::KeyPressed { key_code, modifiers } => {
+                let is_shift_pressed = &modifiers.shift;
+                match self.app_state {
+                    AppState::Menu => {
+                        match key_code {
+                            keyboard::KeyCode::Escape => {
+                                self.app_state = AppState::Tagging 
+                            }
+                            keyboard::KeyCode::Q => {
+                                // TODO: exit more gracefully
+                                assert!(1 == 0); // ¯\_(ツ)_/¯
+                            }
+                            keyboard::KeyCode::O => {
+                                self.organize_mode.next();
+                            }
+                            keyboard::KeyCode::R => {
+                                match self.run_organize_process() {
+                                    Err(e) => panic!("Error running process: {}", e),
+                                    _ => ()
+                                }
+                            }
+                            _ => ()
+                        }
+                    }
+                    AppState::Tagging => {
+                        match key_code {
+                            keyboard::KeyCode::Escape => {
+                                self.app_state = AppState::Menu
+                            }
+                            _ => ()
+                        }
+
+                        let state = self.get_mut_state(self.image_queue).image_queue_mut();
                         match key_code {
                             keyboard::KeyCode::Left => {
                                 match state.image_infos.prev(state.selected_image_index, |_| true) {
@@ -146,7 +302,7 @@ impl App {
                             keyboard::KeyCode::Delete => {
                                 if state.selected_image_index < state.image_infos.len() {
                                     if let Some(x) = state.image_infos.get(state.selected_image_index) {
-                                        match fs::remove_file("images/".to_string() + &x.path) {
+                                        match fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
                                             Ok(_) => println!("Deleted {} successfully", x.path),
                                             Err(e) => println!("{}", e),
                                         }
@@ -159,34 +315,36 @@ impl App {
                     }
                 }
             }
-        }
+            keyboard::Event::CharacterReceived(character) => {
+                match self.app_state {
+                    AppState::Tagging => {
+                        match self.keyboard_state {
+                            KeyboardState::Tagging => { 
+                                if character.is_alphabetic() {
+                                    if !self.does_tag_exist(&character.to_string()) {
+                                        self.keyboard_state = KeyboardState::CreatingTag;
+                                        let tag_input_content = content::Content::new(AppView::TagInput(TagInputState { 
+                                            tag_input_value: "".to_string(),
+                                            tag: character
+                                        }));
 
-        match self.keyboard_state {
-            KeyboardState::Tagging => {
-                match event {
-                    keyboard::Event::CharacterReceived(character) => {
-                        if character.is_alphabetic() {
-                            if !self.does_tag_exist(&character.to_string()) {
-                                self.keyboard_state = KeyboardState::CreatingTag;
-                                let tag_input_content = content::Content::new(AppView::TagInput(TagInputState { 
-                                    tag_input_value: "".to_string(),
-                                    tag: character
-                                }));
+                                        let (pane, split) = self.state.split(pane_grid::Axis::Horizontal, 
+                                                                             &self.image_display, tag_input_content)
+                                                                      .expect("Pane couldn't split");
+                                        self.tag_input = Some(pane);
+                                        self.state.resize(&split, 0.9);
+                                    }
 
-                                let (pane, split) = self.state.split(pane_grid::Axis::Horizontal, 
-                                                                     &self.image_display, tag_input_content)
-                                                              .expect("Pane couldn't split");
-                                self.tag_input = Some(pane);
-                                self.state.resize(&split, 0.9);
+                                    self.toggle_tag_on_current_image(&character);
+                                }
                             }
-
-                            self.toggle_tag_on_current_image(&character);
+                            KeyboardState::CreatingTag => ()
                         }
                     }
                     _ => ()
                 }
             }
-            KeyboardState::CreatingTag => ()
+            _ => ()
         }
     }
 
@@ -198,49 +356,35 @@ impl App {
     }
 
     fn load_current_image(self: &mut Self) {
-        let mut state: Option<(String, Vec::<char>)> = None;
-        if let Some((current_path, tags)) = self.get_current_image_info() {
-            state = Some((current_path, tags.iter().map(|tag| *tag.clone()).collect()));
-        }
+        let (current_path, tags) = self.get_current_image_info();
+        let tags = tags.iter().map(|tag| *tag.clone()).collect();
 
-        if let AppView::ImageDisplay(display_state) = self.get_state(self.image_display) { 
-            match state {
-                Some((path, tags)) => {
-                    display_state.current_image_path = path;
-                    display_state.current_image_tags = Some(tags);
-                }
-                None => ()
-            }
-        }
+        let display_state = self.get_mut_state(self.image_display).image_display_mut();
+        display_state.current_image_path = current_path;
+        display_state.current_image_tags = Some(tags);
     }
 
-    fn get_current_image_info(self: &mut Self) -> Option<(String, Vec::<&char>)> {
-        if let AppView::ImageQueue(state) = self.get_state(self.image_queue) {
-            Some((state.image_infos[state.selected_image_index].path.clone(),
-             state.image_infos[state.selected_image_index].tags.keys().collect()))
-        } else {
-            None
-        }
+    fn get_current_image_info(self: &mut Self) -> (String, Vec::<&char>) {
+        let state = self.get_mut_state(self.image_queue).image_queue_mut();
+
+        (state.image_infos[state.selected_image_index].path.clone(),
+         state.image_infos[state.selected_image_index].tags.keys().collect())
     }
 
     fn toggle_tag_on_current_image(self: &mut Self, key: &char) {
-        if let AppView::ImageQueue(state) = self.get_state(self.image_queue) {
-            if state.image_infos[state.selected_image_index].tags.contains_key(key) {
-                state.image_infos[state.selected_image_index].tags.remove(key);
-            } else {
-                state.image_infos[state.selected_image_index].tags.insert(key.clone(), ());
-            }
+        let state = self.get_mut_state(self.image_queue).image_queue_mut();
+        if state.image_infos[state.selected_image_index].tags.contains_key(key) {
+            state.image_infos[state.selected_image_index].tags.remove(key);
+        } else {
+            state.image_infos[state.selected_image_index].tags.insert(key.clone(), ());
         }
     }
 
     fn does_tag_exist(self: &mut Self, key: &String) -> bool {
-        let mut result: bool = false;
-
-        if let AppView::SidePanel(state) = self.get_state(self.side_panel) {
-            result = state.tags.contains_key(key);
-        }
-
-        return result;
+        self.get_state(self.side_panel)
+            .side_panel()
+            .tags
+            .contains_key(key)
     }
 }
 
@@ -254,9 +398,9 @@ impl Application for App {
             label: String::from("Tags"),
             tags: HashMap::<String,String>::new()
         }));
-        let image_queue_content = content::Content::new(AppView::ImageQueue(ImageQueueState::new("images/")));
+        let image_queue_content = content::Content::new(AppView::ImageQueue(ImageQueueState::new(TEST_DIRECTORY)));
         let image_display_content = content::Content::new(AppView::ImageDisplay(ImageDisplayState {
-            root_path: "images/".to_string(),
+            root_path: TEST_DIRECTORY.to_string(),
             label: String::from("Image"),
             current_image_path: "".to_string(),
             current_image_tags: None
@@ -282,7 +426,8 @@ impl Application for App {
             image_queue: image_queue_pane,
             image_display: image_display_pane,
             tag_input: None,
-            keyboard_state: KeyboardState::Tagging
+            keyboard_state: KeyboardState::Tagging,
+            organize_mode: OrganizeMode::Copy
         }, Command::none())
     }
 
@@ -297,9 +442,8 @@ impl Application for App {
             Message::TextInputChanged(text) => {
                 match self.tag_input {
                     Some(tag_input) => {
-                        if let AppView::TagInput(state) = self.get_state(tag_input) { 
-                            state.tag_input_value = text;
-                        }
+                        let state = self.get_mut_state(tag_input).tag_input_mut();
+                        state.tag_input_value = text;
                     },
                     None => ()
                 }
@@ -309,23 +453,24 @@ impl Application for App {
                 let mut submitted_tag: String = "Error getting tag".to_string();
                 match self.tag_input {
                     Some(tag_input) => {
-                        if let AppView::TagInput(state) = self.get_state(tag_input) { 
-                            submitted_value = state.tag_input_value.clone();
-                            submitted_tag = state.tag.to_string();
-                            state.tag_input_value = "".to_string();
-                            self.state.close(&tag_input);
-                        }
+                        let state = self.get_mut_state(tag_input).tag_input_mut();
+                        submitted_value = state.tag_input_value.clone();
+                        submitted_tag = state.tag.to_string();
+                        state.tag_input_value = "".to_string();
+                        self.state.close(&tag_input);
                     },
                     _ => ()
                 }
 
                 // code for inserting a new tag into hashmap
-                if let AppView::SidePanel(state) = self.get_state(self.side_panel) { 
-                    state.tags.insert(submitted_tag, submitted_value);
-                }
+                let state = self.get_mut_state(self.side_panel).side_panel_mut();
+                state.tags.insert(submitted_tag, submitted_value);
 
                 self.keyboard_state = KeyboardState::Tagging;
                 self.tag_input = None;
+            }
+            Message::SelectedOrganizeMode(mode) => {
+                self.organize_mode = mode;
             }
         }
 
@@ -349,7 +494,27 @@ impl Application for App {
                                 .push(Row::<'_, Message>::new()
                                     .push(Container::new(Text::new("Q - Quit"))))
                                 .push(Row::<'_, Message>::new()
-                                    .push(Container::new(Text::new("Escape - Resume"))));
+                                    .push(Container::new(Text::new("O - Organize Mode")))
+                                    .push(Radio::new(
+                                            OrganizeMode::Copy, 
+                                            "Copy", 
+                                            Some(self.organize_mode), 
+                                            Message::SelectedOrganizeMode))
+                                    .push(Radio::new(
+                                            OrganizeMode::Move, 
+                                            "Move", 
+                                            Some(self.organize_mode), 
+                                            Message::SelectedOrganizeMode))
+                                    .push(Radio::new(
+                                            OrganizeMode::Link, 
+                                            "Link", 
+                                            Some(self.organize_mode), 
+                                            Message::SelectedOrganizeMode))
+                                    )
+                                .push(Row::<'_, Message>::new()
+                                    .push(Container::new(Text::new("R - Run Organize Process"))))
+                                .push(Row::<'_, Message>::new()
+                                    .push(Container::new(Text::new("Escape - Close Menu"))));
                 Container::new(column)
                     .width(Length::Fill)
                     .height(Length::Fill)
