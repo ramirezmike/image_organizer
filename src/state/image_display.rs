@@ -1,7 +1,7 @@
 use iced::{ Scrollable, scrollable, Length, Container, Column, Row, Element, Align, Text };
 
 use crate::app::Message;
-use crate::app::utils;
+use crate::util;
 
 #[derive(Debug)]
 pub struct ImageDisplayState {
@@ -30,7 +30,7 @@ impl ImageDisplayState {
         let scrollable = Scrollable::new(scroll)
                             .align_items(Align::Start)
                             .push(Text::new(self.label.to_string()).size(30)) 
-                            .push(utils::image::load_image(self.root_path.clone() + &self.current_image_path.clone()))
+                            .push(util::image::load_image(self.root_path.clone() + &self.current_image_path.clone()))
                             .push(tag_row);
 
         Container::new(scrollable)

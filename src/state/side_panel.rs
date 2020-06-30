@@ -3,7 +3,7 @@ use iced::{ Scrollable, scrollable, Length,
 use std::{ collections::HashMap };
 
 use crate::app::Message;
-use crate::app::style;
+use crate::style;
 
 #[derive(Debug)]
 pub struct SidePanelState { 

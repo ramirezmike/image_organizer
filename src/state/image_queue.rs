@@ -3,8 +3,8 @@ use iced::{ Scrollable, scrollable, Length,
 use std::{ cmp, collections::HashMap };
 
 use crate::app::Message;
-use crate::app::utils;
-use crate::app::style;
+use crate::util;
+use crate::style;
 
 #[derive(Debug)]
 pub struct ImageQueueState {
@@ -20,7 +20,7 @@ pub struct ImageInfo {
 
 impl ImageQueueState {
     pub fn new(path: &str) -> ImageQueueState {
-        let mut image_paths = utils::file_io::get_directory_list(path).unwrap_or(Vec::<String>::new());
+        let mut image_paths = util::file_io::get_directory_list(path).unwrap_or(Vec::<String>::new());
         image_paths.sort_unstable();
 
         ImageQueueState { 

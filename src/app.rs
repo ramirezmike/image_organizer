@@ -2,16 +2,18 @@ use iced::{ pane_grid, PaneGrid, executor, Command, Length, Text, Column,
             Row, Subscription, Container, Element, Application, Radio };
 use iced_native::{ keyboard, Event };
 use std::{ fs, collections::HashMap, path, os::unix, env };
-mod style;
-mod utils;
-mod content;
-mod states;
-use states::image_queue::ImageQueueState as ImageQueueState;
-use states::image_display::ImageDisplayState as ImageDisplayState;
-use states::side_panel::SidePanelState as SidePanelState;
-use states::tag_input::TagInputState as TagInputState;
+use crate::style;
+use crate::content;
+use crate::state::*;
 
 const TEST_DIRECTORY: &str = "images/";
+
+/*
+    TODO: Bugs
+    - able to tag with characters that can't be folder names
+    - { } doesn't go to the next/prev untagged
+    - while tagging, image navigation still responds
+*/
 
 // TODO : Move this into a separate file
 trait GetWhere<T> { 

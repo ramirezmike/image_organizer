@@ -2,7 +2,7 @@ use iced::{ Scrollable, scrollable, Length, Container, Element, Align };
 use iced_native::{ text_input, TextInput };
 
 use crate::app::Message;
-use crate::app::style;
+use crate::style;
 
 #[derive(Debug)]
 pub struct TagInputState {
