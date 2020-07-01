@@ -6,6 +6,8 @@ mod style;
 mod util;
 mod content;
 mod state;
+mod lib_ext;
+mod enums;
 
 fn main() {
     println!("Hello, world!");

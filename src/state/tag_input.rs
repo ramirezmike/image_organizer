@@ -1,7 +1,7 @@
 use iced::{ Scrollable, scrollable, Length, Container, Element, Align };
 use iced_native::{ text_input, TextInput };
 
-use crate::app::Message;
+use crate::enums::Message;
 use crate::style;
 
 #[derive(Debug)]

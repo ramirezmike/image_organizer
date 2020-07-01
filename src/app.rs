@@ -4,7 +4,9 @@ use iced_native::{ keyboard, Event };
 use std::{ fs, collections::HashMap, path, os::unix, env };
 use crate::style;
 use crate::content;
+use crate::lib_ext::*;
 use crate::state::*;
+use crate::enums::*;
 
 const TEST_DIRECTORY: &str = "images/";
 
@@ -14,134 +16,6 @@ const TEST_DIRECTORY: &str = "images/";
     - { } doesn't go to the next/prev untagged
     - while tagging, image navigation still responds
 */
-
-// TODO : Move this into a separate file
-trait GetWhere<T> { 
-    fn next<F>(self: &Self, index: usize, predicate: F) -> Option<usize> where F: Fn (&T) -> bool;
-    fn prev<F>(self: &Self, index: usize, predicate: F) -> Option<usize> where F: Fn (&T) -> bool;
-}
-
-impl <T> GetWhere<T> for std::vec::Vec<T> {
-    fn prev<F>(self: &Self, i: usize, predicate: F)  -> Option<usize> where F: Fn (&T) -> bool {
-        let mut result = None;
-        if i > 0 { 
-            for index in (0..i).rev() {
-                if predicate(&self[index]) {
-                    result = Some(index);
-                    break;
-                }
-            }
-        } 
-        result
-    }
-
-    fn next<F>(self: &Self, i: usize, predicate: F)  -> Option<usize> where F: Fn (&T) -> bool {
-        let len = self.len();
-        let mut result = None;
-        let i = i + 1;
-        if i < len { 
-            for index in i..len {
-                if predicate(&self[index]) {
-                    result = Some(index);
-                    break;
-                }
-            }
-        } 
-        result
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OrganizeMode {
-    Copy,
-    Move,
-    Link,
-}
-
-impl OrganizeMode {
-    // TODO force this to be the same size as the number of enum variants
-    const MODES: [OrganizeMode; 3] = [OrganizeMode::Copy, OrganizeMode::Move, OrganizeMode::Link];
-
-    pub fn next(self: &mut Self) {
-        if let Some(mut current_mode) = OrganizeMode::MODES.iter().position(|x| x == self) {
-            current_mode = current_mode + 1;
-            if current_mode > 2 { current_mode = 0 }
-            *self = OrganizeMode::MODES[current_mode];
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    EventOccurred(Event),
-    TextInputChanged(String),
-    TextInputSubmitted,
-    Resized(pane_grid::ResizeEvent),
-    SelectedOrganizeMode(OrganizeMode)
-}
-
-#[derive(Debug)]
-pub enum AppView {
-    SidePanel(SidePanelState),
-    ImageQueue(ImageQueueState),
-    ImageDisplay(ImageDisplayState),
-    TagInput(TagInputState),
-}
-
-impl AppView {
-    fn side_panel(self: &Self) -> &SidePanelState {
-        match self {
-            AppView::SidePanel(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-
-    fn side_panel_mut(self: &mut Self) -> &mut SidePanelState {
-        match self {
-            AppView::SidePanel(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-
-    fn image_queue(self: &Self) -> &ImageQueueState {
-        match self {
-            AppView::ImageQueue(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-
-    fn tag_input_mut(self: &mut Self) -> &mut TagInputState {
-        match self {
-            AppView::TagInput(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-
-    fn image_display_mut(self: &mut Self) -> &mut ImageDisplayState {
-        match self {
-            AppView::ImageDisplay(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-
-    fn image_queue_mut(self: &mut Self) -> &mut ImageQueueState {
-        match self {
-            AppView::ImageQueue(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-}
-
-#[derive(Debug)]
-enum KeyboardState {
-    Tagging,
-    CreatingTag
-}
-
-enum AppState {
-    Menu,
-    Tagging
-}
 
 pub struct App {
     app_state: AppState,

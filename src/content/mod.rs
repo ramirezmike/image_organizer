@@ -1,8 +1,8 @@
 use iced::{ scrollable, Element, pane_grid };
 use iced_native::{ text_input };
 
-use crate::app::AppView;
-use crate::app::Message;
+use crate::enums::AppView;
+use crate::enums::Message;
 
 #[derive(Debug)]
 pub struct Content {
