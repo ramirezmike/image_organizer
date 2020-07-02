@@ -1,7 +1,7 @@
 use iced::{ pane_grid, PaneGrid, executor, Command, Length, Text, Column,
             Row, Subscription, Container, Element, Application, Radio };
 use iced_native::{ keyboard, Event };
-use std::{ fs, collections::HashMap, path, os::unix, env };
+use std::{ fs, collections::HashMap, path, os::unix, env, io };
 use crate::style;
 use crate::content;
 use crate::lib_ext::*;
@@ -12,8 +12,6 @@ const TEST_DIRECTORY: &str = "images/";
 
 /*
     TODO: Bugs
-    - able to tag with characters that can't be folder names
-    - { } doesn't go to the next/prev untagged
     - while tagging, image navigation still responds
 */
 
@@ -120,8 +118,7 @@ impl App {
 
     fn handle_keyboard_event(self: &mut Self, event: keyboard::Event) {
         match event {
-            keyboard::Event::KeyPressed { key_code, modifiers } => {
-                let is_shift_pressed = &modifiers.shift;
+            keyboard::Event::KeyPressed { key_code, .. } => {
                 match self.app_state {
                     AppState::Menu => {
                         match key_code {
@@ -155,43 +152,46 @@ impl App {
                             _ => ()
                         }
 
-                        let state = self.get_mut_state(self.image_queue).image_queue_mut();
                         match key_code {
                             keyboard::KeyCode::Left => {
+                                let state = self.get_mut_state(self.image_queue).image_queue_mut();
                                 match state.image_infos.prev(state.selected_image_index, |_| true) {
                                     Some(x) => state.selected_image_index = x,
                                     _ => ()
                                 }
                             },
                             keyboard::KeyCode::Right => {
+                                let state = self.get_mut_state(self.image_queue).image_queue_mut();
                                 match state.image_infos.next(state.selected_image_index, |_| true) {
                                     Some(x) => state.selected_image_index = x,
                                     _ => ()
                                 }
                             },
-                            keyboard::KeyCode::LBracket => {
-                                match state.image_infos.prev(state.selected_image_index,
-                                                             |x| x.tags.is_empty() == !is_shift_pressed) {
-                                    Some(x) => state.selected_image_index = x,
-                                    _ => ()
-                                }
-                            },
-                            keyboard::KeyCode::RBracket => {
-                                match state.image_infos.next(state.selected_image_index,
-                                                             |x| x.tags.is_empty() == !is_shift_pressed) {
-                                    Some(x) => state.selected_image_index = x,
-                                    _ => ()
-                                }
-                            },
                             keyboard::KeyCode::Delete => {
+                                let mut error: Option<io::Error> = None;
+                                let mut path: Option<String> = None;
+                                let state = self.get_mut_state(self.image_queue).image_queue_mut();
                                 if state.selected_image_index < state.image_infos.len() {
                                     if let Some(x) = state.image_infos.get(state.selected_image_index) {
-                                        match fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
-                                            Ok(_) => println!("Deleted {} successfully", x.path),
-                                            Err(e) => println!("{}", e),
+                                        path = Some(x.path.clone());
+
+                                        if let Err(e) = fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
+                                            error = Some(e);
                                         }
-                                        state.delete_current();
                                     }
+                                }
+
+                                match path {
+                                    Some(x) => {
+                                        match error {
+                                            Some(e) => self.log(format!("Error deleting {} : {}", x, e)),
+                                            None => {
+                                                state.delete_current();
+                                                self.log(format!("Deleted {} successfully", x))
+                                            }
+                                        }
+                                    },
+                                    None => self.log("Error getting path of current file".to_string())
                                 }
                             },
                             _ => ()
@@ -220,6 +220,39 @@ impl App {
                                     }
 
                                     self.toggle_tag_on_current_image(&character);
+                                } else {
+                                    let state = self.get_mut_state(self.image_queue).image_queue_mut();
+                                    match character {
+                                        '[' => {
+                                            if let Some(x) = state.image_infos
+                                                                    .prev(state.selected_image_index,
+                                                                          |x| x.tags.is_empty()) {
+                                                state.selected_image_index = x;
+                                            }
+                                        },
+                                        ']' => {
+                                            if let Some(x) = state.image_infos
+                                                                    .next(state.selected_image_index,
+                                                                          |x| x.tags.is_empty()) {
+                                                state.selected_image_index = x;
+                                            }
+                                        },
+                                        '{' => {
+                                            if let Some(x) = state.image_infos
+                                                                    .prev(state.selected_image_index,
+                                                                          |x| !x.tags.is_empty()) {
+                                                state.selected_image_index = x;
+                                            }
+                                        },
+                                        '}' => {
+                                            if let Some(x) = state.image_infos
+                                                                    .next(state.selected_image_index,
+                                                                          |x| !x.tags.is_empty()) {
+                                                state.selected_image_index = x;
+                                            }
+                                        },
+                                        _ => ()
+                                    }
                                 }
                             }
                             KeyboardState::None => ()
