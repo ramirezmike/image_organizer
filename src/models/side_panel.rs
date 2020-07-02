@@ -2,7 +2,7 @@ use iced::{ Scrollable, scrollable, Length,
             Row, Container, Element, Align, Text };
 use std::{ collections::HashMap };
 
-use crate::enums::Message;
+use crate::states::Message;
 use crate::style;
 
 #[derive(Debug)]

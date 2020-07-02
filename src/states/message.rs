@@ -1,6 +1,6 @@
 use iced::{ pane_grid };
 use iced_native::{ Event };
-use crate::enums::organize_mode::OrganizeMode;
+use crate::states::organize_mode::OrganizeMode;
 
 #[derive(Debug, Clone)]
 pub enum Message {

@@ -1,4 +1,4 @@
-use crate::state::*;
+use crate::models::*;
 
 #[derive(Debug)]
 pub enum AppView {

@@ -5,9 +5,9 @@ mod app;
 mod style;
 mod util;
 mod content;
-mod state;
+mod models;
 mod lib_ext;
-mod enums;
+mod states;
 
 fn main() {
     println!("Hello, world!");

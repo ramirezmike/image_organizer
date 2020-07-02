@@ -1,6 +1,6 @@
 use iced::{ Scrollable, scrollable, Length, Container, Column, Row, Element, Align, Text };
 
-use crate::enums::Message;
+use crate::states::Message;
 use crate::util;
 
 #[derive(Debug)]

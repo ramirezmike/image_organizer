@@ -5,8 +5,8 @@ use std::{ fs, collections::HashMap, path, os::unix, env, io };
 use crate::style;
 use crate::content;
 use crate::lib_ext::*;
-use crate::state::*;
-use crate::enums::*;
+use crate::models::*;
+use crate::states::*;
 
 const TEST_DIRECTORY: &str = "images/";
 
