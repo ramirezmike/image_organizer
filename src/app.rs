@@ -25,10 +25,15 @@ pub struct App {
     image_display: pane_grid::Pane,
     tag_input: Option<pane_grid::Pane>,
     keyboard_state: KeyboardState,
-    organize_mode: OrganizeMode 
+    organize_mode: OrganizeMode,
+    console_messages: Vec::<String>
 }
 
 impl App {
+    fn log(self: &mut Self, message: String) {
+        self.console_messages.push(message);
+    }
+
     fn get_mut_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
         &mut self.state.get_mut(&pane)
                        .expect("Image Queue State missing")
@@ -41,7 +46,7 @@ impl App {
                    .app_view
     }
 
-    fn run_organize_process(self: &Self) -> Result<(), std::io::Error> {
+    fn run_organize_process(self: &mut Self) -> Result<(), std::io::Error> {
         let side_panel = self.get_state(self.side_panel).side_panel();
         let image_queue = self.get_state(self.image_queue).image_queue();
 
@@ -68,7 +73,7 @@ impl App {
             let current_directory = TEST_DIRECTORY.to_string() + key;
             if !path::Path::new(&current_directory).exists() {
                 if let Err(e) = fs::create_dir_all(&current_directory) {
-                    println!("Error creating {}: {}", current_directory, e);
+                    self.log(format!("Error creating {}: {}", current_directory, e));
                     continue; // try next folder
                 }
             }
@@ -82,28 +87,28 @@ impl App {
                         match fs::copy(source,
                                        &(current_directory.to_string() 
                                            + "/" + file)) {
-                            Ok(_) => println!("{} copied", file),
-                            Err(e) => println!("Error copying {}: {}", file, e)
+                            Ok(_) => self.log(format!("{} copied", file)),
+                            Err(e) => self.log(format!("Error copying {}: {}", file, e))
                         }
                     }
                     OrganizeMode::Move => {
                         match fs::copy(&source,
                                        &(current_directory.to_string() 
                                            + "/" + file)) {
-                            Ok(_) => println!("{} copied", file),
-                            Err(e) => println!("Error copying {}: {}", file, e)
+                            Ok(_) => self.log(format!("{} copied", file)),
+                            Err(e) => self.log(format!("Error copying {}: {}", file, e))
                         }
                         match fs::remove_file(&source) {
-                            Ok(_) => println!("Original {}", file),
-                            Err(e) => println!("{}", e),
+                            Ok(_) => self.log(format!("Original {}", file)),
+                            Err(e) => self.log(format!("{}", e)),
                         }
                     }
                     OrganizeMode::Link => {
                         match unix::fs::symlink(source,
                                             &(current_directory.to_string() 
                                                 + "/" + file)) {
-                            Ok(_) => println!("{} linked", file),
-                            Err(e) => println!("Error linking {}: {}", file, e)
+                            Ok(_) => self.log(format!("{} linked", file)),
+                            Err(e) => self.log(format!("Error linking {}: {}", file, e))
                         }
                     }
                 }
@@ -135,6 +140,9 @@ impl App {
                                     Err(e) => panic!("Error running process: {}", e),
                                     _ => ()
                                 }
+                            }
+                            keyboard::KeyCode::C => {
+                                self.console_messages.clear();
                             }
                             _ => ()
                         }
@@ -170,7 +178,7 @@ impl App {
                             },
                             keyboard::KeyCode::RBracket => {
                                 match state.image_infos.next(state.selected_image_index,
-                                                             |x| x.tags.is_empty() == !&modifiers.shift) {
+                                                             |x| x.tags.is_empty() == !is_shift_pressed) {
                                     Some(x) => state.selected_image_index = x,
                                     _ => ()
                                 }
@@ -198,7 +206,7 @@ impl App {
                             KeyboardState::Tagging => { 
                                 if character.is_alphabetic() {
                                     if !self.does_tag_exist(&character.to_string()) {
-                                        self.keyboard_state = KeyboardState::CreatingTag;
+                                        self.keyboard_state = KeyboardState::None;
                                         let tag_input_content = content::Content::new(AppView::TagInput(TagInputState { 
                                             tag_input_value: "".to_string(),
                                             tag: character
@@ -214,7 +222,7 @@ impl App {
                                     self.toggle_tag_on_current_image(&character);
                                 }
                             }
-                            KeyboardState::CreatingTag => ()
+                            KeyboardState::None => ()
                         }
                     }
                     _ => ()
@@ -303,7 +311,8 @@ impl Application for App {
             image_display: image_display_pane,
             tag_input: None,
             keyboard_state: KeyboardState::Tagging,
-            organize_mode: OrganizeMode::Copy
+            organize_mode: OrganizeMode::Copy,
+            console_messages: Vec::<String>::new()
         }, Command::none())
     }
 
@@ -338,7 +347,6 @@ impl Application for App {
                     _ => ()
                 }
 
-                // code for inserting a new tag into hashmap
                 let state = self.get_mut_state(self.side_panel).side_panel_mut();
                 state.tags.insert(submitted_tag, submitted_value);
 
@@ -366,31 +374,43 @@ impl Application for App {
     fn view(&mut self) -> Element<Message> {
         match self.app_state {
             AppState::Menu => {
-                let column = Column::<'_, Message>::new()
-                                .push(Row::<'_, Message>::new()
-                                    .push(Container::new(Text::new("Q - Quit"))))
-                                .push(Row::<'_, Message>::new()
-                                    .push(Container::new(Text::new("O - Organize Mode")))
-                                    .push(Radio::new(
-                                            OrganizeMode::Copy, 
-                                            "Copy", 
-                                            Some(self.organize_mode), 
-                                            Message::SelectedOrganizeMode))
-                                    .push(Radio::new(
-                                            OrganizeMode::Move, 
-                                            "Move", 
-                                            Some(self.organize_mode), 
-                                            Message::SelectedOrganizeMode))
-                                    .push(Radio::new(
-                                            OrganizeMode::Link, 
-                                            "Link", 
-                                            Some(self.organize_mode), 
-                                            Message::SelectedOrganizeMode))
-                                    )
-                                .push(Row::<'_, Message>::new()
-                                    .push(Container::new(Text::new("R - Run Organize Process"))))
-                                .push(Row::<'_, Message>::new()
-                                    .push(Container::new(Text::new("Escape - Close Menu"))));
+                let mut column = Column::<'_, Message>::new()
+                                    .push(Row::<'_, Message>::new()
+                                        .push(Container::new(Text::new("Q - Quit"))))
+                                    .push(Row::<'_, Message>::new()
+                                        .push(Container::new(Text::new("O - Organize Mode")))
+                                        .push(Radio::new(
+                                                OrganizeMode::Copy, 
+                                                "Copy", 
+                                                Some(self.organize_mode), 
+                                                Message::SelectedOrganizeMode))
+                                        .push(Radio::new(
+                                                OrganizeMode::Move, 
+                                                "Move", 
+                                                Some(self.organize_mode), 
+                                                Message::SelectedOrganizeMode))
+                                        .push(Radio::new(
+                                                OrganizeMode::Link, 
+                                                "Link", 
+                                                Some(self.organize_mode), 
+                                                Message::SelectedOrganizeMode))
+                                        )
+                                    .push(Row::<'_, Message>::new()
+                                        .push(Container::new(Text::new("R - Run Organize Process"))))
+                                    .push(Row::<'_, Message>::new()
+                                        .push(Container::new(Text::new("C - Clear Console"))))
+                                    .push(Row::<'_, Message>::new()
+                                        .push(Container::new(Text::new("Escape - Close Menu"))));
+
+                column = self.console_messages.iter()
+                                              .fold(column, |acc, message| {
+                                                  let text = Text::new(message);
+                                                  let container = Container::new(text);
+                                                  let row = Row::<'_, Message>::new()
+                                                                .push(container);
+
+                                                  acc.push(row)
+                                              });
                 Container::new(column)
                     .width(Length::Fill)
                     .height(Length::Fill)
