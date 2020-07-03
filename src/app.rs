@@ -1,12 +1,10 @@
-use iced::{ pane_grid, PaneGrid, executor, Command, Length, Text, Column,
-            Row, Subscription, Container, Element, Application, Radio };
+use iced::{ pane_grid, PaneGrid, executor, Command, Length, Subscription, Container, Element, Application };
 use iced_native::{ keyboard, Event };
-use std::{ fs, collections::HashMap, path, os::unix, env, io };
+use std::{ fs, collections::HashMap, path, os::unix, env };
 use crate::style;
-use crate::content;
-use crate::lib_ext::*;
 use crate::models::*;
 use crate::states::*;
+use crate::views::{ MainView, MenuView };
 
 const TEST_DIRECTORY: &str = "images/";
 
@@ -16,35 +14,36 @@ const TEST_DIRECTORY: &str = "images/";
 */
 
 pub struct App {
-    app_state: AppState,
-    state: pane_grid::State<content::Content>,
+    pub organize_mode: OrganizeMode,
+    pub console_messages: Vec::<String>,
+    pub app_state: AppState,
+    pub image_queue: pane_grid::Pane,
+    pub pane_state: pane_grid::State<MainView>,
+    pub tag_input: Option<pane_grid::Pane>,
+    pub image_display: pane_grid::Pane,
+    pub keyboard_state: KeyboardState,
+
     side_panel: pane_grid::Pane,
-    image_queue: pane_grid::Pane,
-    image_display: pane_grid::Pane,
-    tag_input: Option<pane_grid::Pane>,
-    keyboard_state: KeyboardState,
-    organize_mode: OrganizeMode,
-    console_messages: Vec::<String>
 }
 
 impl App {
-    fn log(self: &mut Self, message: String) {
+    pub fn log(self: &mut Self, message: String) {
         self.console_messages.push(message);
     }
 
-    fn get_mut_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
-        &mut self.state.get_mut(&pane)
-                       .expect("Image Queue State missing")
-                       .app_view
+    pub fn get_mut_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
+        &mut self.pane_state.get_mut(&pane)
+                            .expect("Image Queue State missing")
+                            .app_view
     }
 
-    fn get_state(self: &Self, pane: pane_grid::Pane) -> &AppView {
-        &self.state.get(&pane)
-                   .expect("Image Queue State missing")
-                   .app_view
+    pub fn get_state(self: &Self, pane: pane_grid::Pane) -> &AppView {
+        &self.pane_state.get(&pane)
+                        .expect("Image Queue State missing")
+                        .app_view
     }
 
-    fn run_organize_process(self: &mut Self) -> Result<(), std::io::Error> {
+    pub fn run_organize_process(self: &mut Self) -> Result<(), std::io::Error> {
         let side_panel = self.get_state(self.side_panel).side_panel();
         let image_queue = self.get_state(self.image_queue).image_queue();
 
@@ -117,151 +116,9 @@ impl App {
     }
 
     fn handle_keyboard_event(self: &mut Self, event: keyboard::Event) {
-        match event {
-            keyboard::Event::KeyPressed { key_code, .. } => {
-                match self.app_state {
-                    AppState::Menu => {
-                        match key_code {
-                            keyboard::KeyCode::Escape => {
-                                self.app_state = AppState::Tagging 
-                            }
-                            keyboard::KeyCode::Q => {
-                                // TODO: exit more gracefully
-                                assert!(1 == 0); // ¯\_(ツ)_/¯
-                            }
-                            keyboard::KeyCode::O => {
-                                self.organize_mode.next();
-                            }
-                            keyboard::KeyCode::R => {
-                                match self.run_organize_process() {
-                                    Err(e) => panic!("Error running process: {}", e),
-                                    _ => ()
-                                }
-                            }
-                            keyboard::KeyCode::C => {
-                                self.console_messages.clear();
-                            }
-                            _ => ()
-                        }
-                    }
-                    AppState::Tagging => {
-                        match key_code {
-                            keyboard::KeyCode::Escape => {
-                                self.app_state = AppState::Menu
-                            }
-                            _ => ()
-                        }
-
-                        match key_code {
-                            keyboard::KeyCode::Left => {
-                                let state = self.get_mut_state(self.image_queue).image_queue_mut();
-                                match state.image_infos.prev(state.selected_image_index, |_| true) {
-                                    Some(x) => state.selected_image_index = x,
-                                    _ => ()
-                                }
-                            },
-                            keyboard::KeyCode::Right => {
-                                let state = self.get_mut_state(self.image_queue).image_queue_mut();
-                                match state.image_infos.next(state.selected_image_index, |_| true) {
-                                    Some(x) => state.selected_image_index = x,
-                                    _ => ()
-                                }
-                            },
-                            keyboard::KeyCode::Delete => {
-                                let mut error: Option<io::Error> = None;
-                                let mut path: Option<String> = None;
-                                let state = self.get_mut_state(self.image_queue).image_queue_mut();
-                                if state.selected_image_index < state.image_infos.len() {
-                                    if let Some(x) = state.image_infos.get(state.selected_image_index) {
-                                        path = Some(x.path.clone());
-
-                                        if let Err(e) = fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
-                                            error = Some(e);
-                                        }
-                                    }
-                                }
-
-                                match path {
-                                    Some(x) => {
-                                        match error {
-                                            Some(e) => self.log(format!("Error deleting {} : {}", x, e)),
-                                            None => {
-                                                state.delete_current();
-                                                self.log(format!("Deleted {} successfully", x))
-                                            }
-                                        }
-                                    },
-                                    None => self.log("Error getting path of current file".to_string())
-                                }
-                            },
-                            _ => ()
-                        }
-                    }
-                }
-            }
-            keyboard::Event::CharacterReceived(character) => {
-                match self.app_state {
-                    AppState::Tagging => {
-                        match self.keyboard_state {
-                            KeyboardState::Tagging => { 
-                                if character.is_alphabetic() {
-                                    if !self.does_tag_exist(&character.to_string()) {
-                                        self.keyboard_state = KeyboardState::None;
-                                        let tag_input_content = content::Content::new(AppView::TagInput(TagInputState { 
-                                            tag_input_value: "".to_string(),
-                                            tag: character
-                                        }));
-
-                                        let (pane, split) = self.state.split(pane_grid::Axis::Horizontal, 
-                                                                             &self.image_display, tag_input_content)
-                                                                      .expect("Pane couldn't split");
-                                        self.tag_input = Some(pane);
-                                        self.state.resize(&split, 0.9);
-                                    }
-
-                                    self.toggle_tag_on_current_image(&character);
-                                } else {
-                                    let state = self.get_mut_state(self.image_queue).image_queue_mut();
-                                    match character {
-                                        '[' => {
-                                            if let Some(x) = state.image_infos
-                                                                    .prev(state.selected_image_index,
-                                                                          |x| x.tags.is_empty()) {
-                                                state.selected_image_index = x;
-                                            }
-                                        },
-                                        ']' => {
-                                            if let Some(x) = state.image_infos
-                                                                    .next(state.selected_image_index,
-                                                                          |x| x.tags.is_empty()) {
-                                                state.selected_image_index = x;
-                                            }
-                                        },
-                                        '{' => {
-                                            if let Some(x) = state.image_infos
-                                                                    .prev(state.selected_image_index,
-                                                                          |x| !x.tags.is_empty()) {
-                                                state.selected_image_index = x;
-                                            }
-                                        },
-                                        '}' => {
-                                            if let Some(x) = state.image_infos
-                                                                    .next(state.selected_image_index,
-                                                                          |x| !x.tags.is_empty()) {
-                                                state.selected_image_index = x;
-                                            }
-                                        },
-                                        _ => ()
-                                    }
-                                }
-                            }
-                            KeyboardState::None => ()
-                        }
-                    }
-                    _ => ()
-                }
-            }
-            _ => ()
+        match self.app_state {
+            AppState::Menu => MenuView::handle_keyboard(self, event),
+            AppState::Tagging => MainView::handle_keyboard(self, event)
         }
     }
 
@@ -288,7 +145,7 @@ impl App {
          state.image_infos[state.selected_image_index].tags.keys().collect())
     }
 
-    fn toggle_tag_on_current_image(self: &mut Self, key: &char) {
+    pub fn toggle_tag_on_current_image(self: &mut Self, key: &char) {
         let state = self.get_mut_state(self.image_queue).image_queue_mut();
         if state.image_infos[state.selected_image_index].tags.contains_key(key) {
             state.image_infos[state.selected_image_index].tags.remove(key);
@@ -297,7 +154,7 @@ impl App {
         }
     }
 
-    fn does_tag_exist(self: &mut Self, key: &String) -> bool {
+    pub fn does_tag_exist(self: &mut Self, key: &String) -> bool {
         self.get_state(self.side_panel)
             .side_panel()
             .tags
@@ -311,12 +168,12 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (App, Command<Message>) {
-        let pane_content = content::Content::new(AppView::SidePanel(SidePanelState {
+        let pane_content = MainView::new(AppView::SidePanel(SidePanelState {
             label: String::from("Tags"),
             tags: HashMap::<String,String>::new()
         }));
-        let image_queue_content = content::Content::new(AppView::ImageQueue(ImageQueueState::new(TEST_DIRECTORY)));
-        let image_display_content = content::Content::new(AppView::ImageDisplay(ImageDisplayState {
+        let image_queue_content = MainView::new(AppView::ImageQueue(ImageQueueState::new(TEST_DIRECTORY)));
+        let image_display_content = MainView::new(AppView::ImageDisplay(ImageDisplayState {
             root_path: TEST_DIRECTORY.to_string(),
             label: String::from("Image"),
             current_image_path: "".to_string(),
@@ -338,7 +195,7 @@ impl Application for App {
 
         (App { 
             app_state: AppState::Menu,
-            state: state,
+            pane_state: state,
             side_panel: pane,
             image_queue: image_queue_pane,
             image_display: image_display_pane,
@@ -355,7 +212,7 @@ impl Application for App {
                 self.handle_event(event);
             }
             Message::Resized(event) => {
-                self.state.resize(&event.split, event.ratio)
+                self.pane_state.resize(&event.split, event.ratio)
             }
             Message::TextInputChanged(text) => {
                 match self.tag_input {
@@ -375,7 +232,7 @@ impl Application for App {
                         submitted_value = state.tag_input_value.clone();
                         submitted_tag = state.tag.to_string();
                         state.tag_input_value = "".to_string();
-                        self.state.close(&tag_input);
+                        self.pane_state.close(&tag_input);
                     },
                     _ => ()
                 }
@@ -407,51 +264,14 @@ impl Application for App {
     fn view(&mut self) -> Element<Message> {
         match self.app_state {
             AppState::Menu => {
-                let mut column = Column::<'_, Message>::new()
-                                    .push(Row::<'_, Message>::new()
-                                        .push(Container::new(Text::new("Q - Quit"))))
-                                    .push(Row::<'_, Message>::new()
-                                        .push(Container::new(Text::new("O - Organize Mode")))
-                                        .push(Radio::new(
-                                                OrganizeMode::Copy, 
-                                                "Copy", 
-                                                Some(self.organize_mode), 
-                                                Message::SelectedOrganizeMode))
-                                        .push(Radio::new(
-                                                OrganizeMode::Move, 
-                                                "Move", 
-                                                Some(self.organize_mode), 
-                                                Message::SelectedOrganizeMode))
-                                        .push(Radio::new(
-                                                OrganizeMode::Link, 
-                                                "Link", 
-                                                Some(self.organize_mode), 
-                                                Message::SelectedOrganizeMode))
-                                        )
-                                    .push(Row::<'_, Message>::new()
-                                        .push(Container::new(Text::new("R - Run Organize Process"))))
-                                    .push(Row::<'_, Message>::new()
-                                        .push(Container::new(Text::new("C - Clear Console"))))
-                                    .push(Row::<'_, Message>::new()
-                                        .push(Container::new(Text::new("Escape - Close Menu"))));
-
-                column = self.console_messages.iter()
-                                              .fold(column, |acc, message| {
-                                                  let text = Text::new(message);
-                                                  let container = Container::new(text);
-                                                  let row = Row::<'_, Message>::new()
-                                                                .push(container);
-
-                                                  acc.push(row)
-                                              });
-                Container::new(column)
+                Container::new(MenuView::view(self))
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .style(style::MainWindow { })
                     .into()
             }
             AppState::Tagging => {
-                let pane_grid = PaneGrid::new(&mut self.state, |pane, content, _focus| {
+                let pane_grid = PaneGrid::new(&mut self.pane_state, |pane, content, _focus| {
                     content.view(pane)
                 })
                 .width(Length::Fill)

@@ -4,10 +4,10 @@ use iced::{ Settings, Application };
 mod app;
 mod style;
 mod util;
-mod content;
 mod models;
 mod lib_ext;
 mod states;
+mod views;
 
 fn main() {
     println!("Hello, world!");
