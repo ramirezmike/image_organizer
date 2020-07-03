@@ -1,4 +1,4 @@
-use iced::{ scrollable, Element, pane_grid };
+use iced::{ scrollable, Length, pane_grid, PaneGrid };
 use iced_native::{ text_input, keyboard };
 use std::{ fs, io };
 
@@ -25,64 +25,73 @@ impl MainView {
         }
     }
 
-    pub fn view(&mut self, _pane: pane_grid::Pane) -> Element<Message> {
-        match &self.app_view {
-            AppView::SidePanel(state) => state.view(&mut self.scroll),
-            AppView::ImageQueue(state) => state.view(&mut self.scroll),
-            AppView::ImageDisplay(state) => state.view(&mut self.scroll),
-            AppView::TagInput(state) => state.view(&mut self.scroll, &mut self.text_input_state)
-        }
+    pub fn view<'a>(pane_state: &'a mut pane_grid::State<MainView>) -> PaneGrid<'a, Message> {
+        PaneGrid::new(pane_state, |_pane, content, _focus| {
+            match &content.app_view {
+                AppView::SidePanel(state) => state.view(&mut content.scroll),
+                AppView::ImageQueue(state) => state.view(&mut content.scroll),
+                AppView::ImageDisplay(state) => state.view(&mut content.scroll),
+                AppView::TagInput(state) => state.view(&mut content.scroll, &mut content.text_input_state)
+            }
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .on_resize(10, Message::Resized)
     }
 
     pub fn handle_keyboard(app: &mut App, event: keyboard::Event) {
         match event {
             keyboard::Event::KeyPressed { key_code, .. } => {
-                match key_code {
-                    keyboard::KeyCode::Escape => {
-                        app.app_state = AppState::Menu
-                    },
-                    keyboard::KeyCode::Left => {
-                        let state = app.get_mut_state(app.image_queue).image_queue_mut();
-                        match state.image_infos.prev(state.selected_image_index, |_| true) {
-                            Some(x) => state.selected_image_index = x,
-                            _ => ()
-                        }
-                    },
-                    keyboard::KeyCode::Right => {
-                        let state = app.get_mut_state(app.image_queue).image_queue_mut();
-                        match state.image_infos.next(state.selected_image_index, |_| true) {
-                            Some(x) => state.selected_image_index = x,
-                            _ => ()
-                        }
-                    },
-                    keyboard::KeyCode::Delete => {
-                        let mut error: Option<io::Error> = None;
-                        let mut path: Option<String> = None;
-                        let state = app.get_mut_state(app.image_queue).image_queue_mut();
-                        if state.selected_image_index < state.image_infos.len() {
-                            if let Some(x) = state.image_infos.get(state.selected_image_index) {
-                                path = Some(x.path.clone());
+                // allow pulling up menu regardless of keyboard state
+                if let keyboard::KeyCode::Escape = key_code {
+                    app.app_state = AppState::Menu
+                }
 
-                                if let Err(e) = fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
-                                    error = Some(e);
-                                }
+                if let KeyboardState::Tagging = app.keyboard_state {
+                    match key_code {
+                        keyboard::KeyCode::Left => {
+                            let state = app.get_mut_state(app.image_queue).image_queue_mut();
+                            match state.image_infos.prev(state.selected_image_index, |_| true) {
+                                Some(x) => state.selected_image_index = x,
+                                _ => ()
                             }
-                        }
+                        },
+                        keyboard::KeyCode::Right => {
+                            let state = app.get_mut_state(app.image_queue).image_queue_mut();
+                            match state.image_infos.next(state.selected_image_index, |_| true) {
+                                Some(x) => state.selected_image_index = x,
+                                _ => ()
+                            }
+                        },
+                        keyboard::KeyCode::Delete => {
+                            let mut error: Option<io::Error> = None;
+                            let mut path: Option<String> = None;
+                            let state = app.get_mut_state(app.image_queue).image_queue_mut();
+                            if state.selected_image_index < state.image_infos.len() {
+                                if let Some(x) = state.image_infos.get(state.selected_image_index) {
+                                    path = Some(x.path.clone());
 
-                        match path {
-                            Some(x) => {
-                                match error {
-                                    Some(e) => app.log(format!("Error deleting {} : {}", x, e)),
-                                    None => {
-                                        state.delete_current();
-                                        app.log(format!("Deleted {} successfully", x))
+                                    if let Err(e) = fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
+                                        error = Some(e);
                                     }
                                 }
-                            },
-                            None => app.log("Error getting path of current file".to_string())
-                        }
-                    },
-                    _ => ()
+                            }
+
+                            match path {
+                                Some(x) => {
+                                    match error {
+                                        Some(e) => app.log(format!("Error deleting {} : {}", x, e)),
+                                        None => {
+                                            state.delete_current();
+                                            app.log(format!("Deleted {} successfully", x))
+                                        }
+                                    }
+                                },
+                                None => app.log("Error getting path of current file".to_string())
+                            }
+                        },
+                        _ => ()
+                    }
                 }
             }
             keyboard::Event::CharacterReceived(character) => {

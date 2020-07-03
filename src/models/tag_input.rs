@@ -11,10 +11,8 @@ pub struct TagInputState {
 }
 
 impl TagInputState {
-    pub fn view<'a>(self: &Self,
-                scroll: &'a mut scrollable::State,
-                text_input_state: &'a mut text_input::State) -> Element<'a, Message> {
-
+    pub fn view<'a>(self: &Self, scroll: &'a mut scrollable::State,
+                    text_input_state: &'a mut text_input::State) -> Element<'a, Message> {
         let scrollable = Scrollable::new(scroll)
                         .align_items(Align::Start)
                         .push(TextInput::new(text_input_state, "Enter Tag Name", 

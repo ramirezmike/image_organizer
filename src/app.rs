@@ -1,4 +1,4 @@
-use iced::{ pane_grid, PaneGrid, executor, Command, Length, Subscription, Container, Element, Application };
+use iced::{ pane_grid, executor, Command, Length, Subscription, Container, Element, Application };
 use iced_native::{ keyboard, Event };
 use std::{ fs, collections::HashMap, path, os::unix, env };
 use crate::style;
@@ -9,8 +9,16 @@ use crate::views::{ MainView, MenuView };
 const TEST_DIRECTORY: &str = "images/";
 
 /*
-    TODO: Bugs
-    - while tagging, image navigation still responds
+    TODO: 
+    - Consider App struct storing all states vs Views holding states?
+    - Pass arguments from main to App to load the program with a directory
+    - Make program load from current directory and remove TEST_DIRECTORY
+    - Add support for other image types (or maybe all files?)
+    - Styling
+    - Save/Load to pause and resume
+    - Folder navigation
+
+    TODO: List of Known Bugs
 */
 
 pub struct App {
@@ -138,8 +146,8 @@ impl App {
         display_state.current_image_tags = Some(tags);
     }
 
-    fn get_current_image_info(self: &mut Self) -> (String, Vec::<&char>) {
-        let state = self.get_mut_state(self.image_queue).image_queue_mut();
+    fn get_current_image_info(self: &Self) -> (String, Vec::<&char>) {
+        let state = self.get_state(self.image_queue).image_queue();
 
         (state.image_infos[state.selected_image_index].path.clone(),
          state.image_infos[state.selected_image_index].tags.keys().collect())
@@ -154,7 +162,7 @@ impl App {
         }
     }
 
-    pub fn does_tag_exist(self: &mut Self, key: &String) -> bool {
+    pub fn does_tag_exist(self: &Self, key: &String) -> bool {
         self.get_state(self.side_panel)
             .side_panel()
             .tags
@@ -271,14 +279,7 @@ impl Application for App {
                     .into()
             }
             AppState::Tagging => {
-                let pane_grid = PaneGrid::new(&mut self.pane_state, |pane, content, _focus| {
-                    content.view(pane)
-                })
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .on_resize(10, Message::Resized);
-
-                Container::new(pane_grid)
+                Container::new(MainView::view(&mut self.pane_state))
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .style(style::MainWindow { })
