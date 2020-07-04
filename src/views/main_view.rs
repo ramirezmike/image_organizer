@@ -30,7 +30,7 @@ impl MainView {
             match &content.app_view {
                 AppView::SidePanel(state) => state.view(&mut content.scroll),
                 AppView::ImageQueue(state) => state.view(&mut content.scroll),
-                AppView::ImageDisplay(state) => state.view(&mut content.scroll),
+                AppView::ImageDisplay(state) => state.view(),
                 AppView::TagInput(state) => state.view(&mut content.scroll, &mut content.text_input_state)
             }
         })

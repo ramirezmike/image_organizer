@@ -183,7 +183,6 @@ impl Application for App {
         let image_queue_content = MainView::new(AppView::ImageQueue(ImageQueueState::new(TEST_DIRECTORY)));
         let image_display_content = MainView::new(AppView::ImageDisplay(ImageDisplayState {
             root_path: TEST_DIRECTORY.to_string(),
-            label: String::from("Image"),
             current_image_path: "".to_string(),
             current_image_tags: None
         }));

@@ -13,11 +13,7 @@ pub fn load_image<'a, T>(src: String) -> Container<'a, T> {
         } else {
             Image::new(format!("{}/{}", env!("CARGO_MANIFEST_DIR"), src))
         }
-        .width(Length::Fill)  // TODO: Not sure if it would be handled here or in resize
-        .height(Length::Fill) // but it'd be good to make the images resize correctly when the window
-                              // resizes so it doesn't introduce scrolling (maybe don't put this in a 
-                              // scrollable container?)
     )
-    .width(Length::Fill)
+    .height(Length::Shrink)
     .center_x()
 }
