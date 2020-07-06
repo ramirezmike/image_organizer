@@ -1,11 +1,12 @@
 use iced::{ Length, Container, Column, Row, Element, Align, Text };
+use std::{ cell::RefCell, rc::Rc };
 
 use crate::states::Message;
 use crate::util;
 
 #[derive(Debug)]
 pub struct ImageDisplayState {
-    pub root_path: String,
+    pub root_path: Rc::<RefCell::<String>>,
     pub current_image_path: String,
     pub current_image_tags: Option<Vec::<char>>,
 }
@@ -25,10 +26,9 @@ impl ImageDisplayState {
             _ => ()
         }
 
-
         let column = Column::<'_, Message>::new()
                             .align_items(Align::Start)
-                            .push(util::image::load_image(self.root_path.clone() + &self.current_image_path.clone()))
+                            .push(util::image::load_image(self.current_image_path.clone()))
                             .push(tag_row);
 
         Container::new(column)

@@ -27,7 +27,7 @@ impl MenuView {
                         }
                     }
                     keyboard::KeyCode::C => {
-                        app.console_messages.clear();
+                        app.console_messages.borrow_mut().clear();
                     }
                     _ => ()
                 }
@@ -65,7 +65,8 @@ impl MenuView {
                         .push(Row::<'_, Message>::new()
                             .push(Container::new(Text::new("Escape - Close Menu"))));
 
-        app.console_messages.iter()
+        app.console_messages.borrow()
+                            .iter()
                             .fold(column, |acc, message| {
                                 let text = Text::new(message);
                                 let container = Container::new(text);

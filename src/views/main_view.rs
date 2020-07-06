@@ -7,8 +7,6 @@ use crate::states::*;
 use crate::models::*;
 use crate::lib_ext::*;
 
-const TEST_DIRECTORY: &str = "images/";
-
 #[derive(Debug)]
 pub struct MainView {
     pub app_view: AppView,
@@ -66,12 +64,13 @@ impl MainView {
                         keyboard::KeyCode::Delete => {
                             let mut error: Option<io::Error> = None;
                             let mut path: Option<String> = None;
+
                             let state = app.get_mut_state(app.image_queue).image_queue_mut();
                             if state.selected_image_index < state.image_infos.len() {
                                 if let Some(x) = state.image_infos.get(state.selected_image_index) {
                                     path = Some(x.path.clone());
 
-                                    if let Err(e) = fs::remove_file(TEST_DIRECTORY.to_string() + &x.path) {
+                                    if let Err(e) = fs::remove_file(&x.path) {
                                         error = Some(e);
                                     }
                                 }

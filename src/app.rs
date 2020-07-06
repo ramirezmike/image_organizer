@@ -1,19 +1,15 @@
 use iced::{ pane_grid, executor, Command, Length, Subscription, Container, Element, Application };
 use iced_native::{ keyboard, Event };
-use std::{ fs, collections::HashMap, path, os::unix, env };
+use std::{ path::PathBuf, fs, collections::HashMap, path, os::unix, env, cell::RefCell, rc::Rc };
 use crate::style;
 use crate::models::*;
 use crate::states::*;
 use crate::views::{ MainView, MenuView };
 
-const TEST_DIRECTORY: &str = "images/";
-
 /*
     TODO: 
     - Consider App struct storing all states vs Views holding states?
-    - Pass arguments from main to App to load the program with a directory
-    - Make program load from current directory and remove TEST_DIRECTORY
-    - Add support for other image types (or maybe all files?)
+    - Add some view of other file types 
     - Styling
     - Save/Load to pause and resume
     - Folder navigation
@@ -23,20 +19,21 @@ const TEST_DIRECTORY: &str = "images/";
 
 pub struct App {
     pub organize_mode: OrganizeMode,
-    pub console_messages: Vec::<String>,
+    pub console_messages: RefCell::<Vec::<String>>,
     pub app_state: AppState,
     pub image_queue: pane_grid::Pane,
     pub pane_state: pane_grid::State<MainView>,
     pub tag_input: Option<pane_grid::Pane>,
     pub image_display: pane_grid::Pane,
     pub keyboard_state: KeyboardState,
+    pub working_directory: Rc::<RefCell::<String>>,
 
     side_panel: pane_grid::Pane,
 }
 
 impl App {
-    pub fn log(self: &mut Self, message: String) {
-        self.console_messages.push(message);
+    pub fn log(self: &Self, message: String) {
+        self.console_messages.borrow_mut().push(message);
     }
 
     pub fn get_mut_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
@@ -75,31 +72,27 @@ impl App {
 
         let current_dir = env::current_dir()?;
         for key in store.keys() {
-            let current_directory = TEST_DIRECTORY.to_string() + key;
-            if !path::Path::new(&current_directory).exists() {
-                if let Err(e) = fs::create_dir_all(&current_directory) {
-                    self.log(format!("Error creating {}: {}", current_directory, e));
+            if !path::Path::new(&key).exists() {
+                if let Err(e) = fs::create_dir_all(&key) {
+                    self.log(format!("Error creating {}: {}", key, e));
                     continue; // try next folder
                 }
             }
 
             for file in &store[key] {
                 let mut source = current_dir.clone();
-                source.push("images");
                 source.push(file);
+                println!("Moving {}", &(key.to_string() + "||" + file));
+                println!("to {}", &(key.to_string() + "/" + file));
                 match self.organize_mode {
                     OrganizeMode::Copy => {
-                        match fs::copy(source,
-                                       &(current_directory.to_string() 
-                                           + "/" + file)) {
+                        match fs::copy(source, &(key.to_string() + "/" + file)) {
                             Ok(_) => self.log(format!("{} copied", file)),
                             Err(e) => self.log(format!("Error copying {}: {}", file, e))
                         }
                     }
                     OrganizeMode::Move => {
-                        match fs::copy(&source,
-                                       &(current_directory.to_string() 
-                                           + "/" + file)) {
+                        match fs::copy(&source, &(key.to_string() + "/" + file)) {
                             Ok(_) => self.log(format!("{} copied", file)),
                             Err(e) => self.log(format!("Error copying {}: {}", file, e))
                         }
@@ -109,9 +102,7 @@ impl App {
                         }
                     }
                     OrganizeMode::Link => {
-                        match unix::fs::symlink(source,
-                                            &(current_directory.to_string() 
-                                                + "/" + file)) {
+                        match unix::fs::symlink(source, &(key.to_string() + "/" + file)) {
                             Ok(_) => self.log(format!("{} linked", file)),
                             Err(e) => self.log(format!("Error linking {}: {}", file, e))
                         }
@@ -138,19 +129,24 @@ impl App {
     }
 
     fn load_current_image(self: &mut Self) {
-        let (current_path, tags) = self.get_current_image_info();
-        let tags = tags.iter().map(|tag| *tag.clone()).collect();
+        if let Some((current_path, tags)) = self.get_current_image_info() {
+            let tags = tags.iter().map(|tag| *tag.clone()).collect();
 
-        let display_state = self.get_mut_state(self.image_display).image_display_mut();
-        display_state.current_image_path = current_path;
-        display_state.current_image_tags = Some(tags);
+            let display_state = self.get_mut_state(self.image_display).image_display_mut();
+            display_state.current_image_path = current_path;
+            display_state.current_image_tags = Some(tags);
+        }
     }
 
-    fn get_current_image_info(self: &Self) -> (String, Vec::<&char>) {
+    fn get_current_image_info(self: &Self) -> Option<(String, Vec::<&char>)> {
         let state = self.get_state(self.image_queue).image_queue();
 
-        (state.image_infos[state.selected_image_index].path.clone(),
-         state.image_infos[state.selected_image_index].tags.keys().collect())
+        if !state.image_infos.is_empty() {
+            Some((state.image_infos[state.selected_image_index].path.clone(),
+                 state.image_infos[state.selected_image_index].tags.keys().collect()))
+        } else {
+            None
+        }
     }
 
     pub fn toggle_tag_on_current_image(self: &mut Self, key: &char) {
@@ -176,13 +172,27 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (App, Command<Message>) {
+        let working_directory: String;
+        let args: Vec<String> = env::args().collect();
+        if args.len() == 1 {
+            let error_message = "Error getting current directory";
+            working_directory = String::from(std::env::current_dir().expect(error_message)
+                                                                    .to_str()
+                                                                    .expect(error_message));
+        } else {
+            working_directory = args[1].clone();
+        }
+
+        assert!(env::set_current_dir(&PathBuf::from(&working_directory)).is_ok());
+        let working_directory: Rc::<RefCell::<String>> = Rc::new(RefCell::new(working_directory));
+
         let pane_content = MainView::new(AppView::SidePanel(SidePanelState {
             label: String::from("Tags"),
             tags: HashMap::<String,String>::new()
         }));
-        let image_queue_content = MainView::new(AppView::ImageQueue(ImageQueueState::new(TEST_DIRECTORY)));
+        let image_queue_content = MainView::new(AppView::ImageQueue(ImageQueueState::new()));
         let image_display_content = MainView::new(AppView::ImageDisplay(ImageDisplayState {
-            root_path: TEST_DIRECTORY.to_string(),
+            root_path: Rc::clone(&working_directory),
             current_image_path: "".to_string(),
             current_image_tags: None
         }));
@@ -209,7 +219,8 @@ impl Application for App {
             tag_input: None,
             keyboard_state: KeyboardState::Tagging,
             organize_mode: OrganizeMode::Copy,
-            console_messages: Vec::<String>::new()
+            console_messages: RefCell::new(Vec::<String>::new()),
+            working_directory: working_directory
         }, Command::none())
     }
 
@@ -281,6 +292,7 @@ impl Application for App {
                 Container::new(MainView::view(&mut self.pane_state))
                     .width(Length::Fill)
                     .height(Length::Fill)
+                    .padding(5)
                     .style(style::MainWindow { })
                     .into()
             }

@@ -68,6 +68,11 @@ impl container::StyleSheet for Pane {
         container::Style {
             text_color: Some(TEXT),
             background: Some(Background::Color(BACKGROUND)),
+            border_width: 2,
+            border_color: Color {
+                a: 0.3,
+                ..Color::BLACK
+            },
             ..Default::default()
         }
     }

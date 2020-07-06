@@ -19,8 +19,9 @@ pub struct ImageInfo {
 }
 
 impl ImageQueueState {
-    pub fn new(path: &str) -> ImageQueueState {
-        let mut image_paths = util::file_io::get_directory_list(path).unwrap_or(Vec::<String>::new());
+    pub fn new() -> ImageQueueState {
+        let mut image_paths = util::file_io::get_directory_list(&".")
+                                .unwrap_or(Vec::<String>::new());
         image_paths.sort_unstable();
 
         ImageQueueState { 
@@ -28,7 +29,7 @@ impl ImageQueueState {
             image_infos: image_paths.iter()
                                     .map(|x| 
                                         ImageInfo { 
-                                            path: x.split(path).collect::<Vec::<_>>()[1].to_string(), 
+                                            path: x[2..].to_string(), // ignore "./" in path
                                             tags: HashMap::<char, ()>::new() 
                                         }
                                     )
