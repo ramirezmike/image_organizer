@@ -1,6 +1,6 @@
 use iced::{ scrollable, Length, pane_grid, PaneGrid };
 use iced_native::{ text_input, keyboard };
-use std::{ fs, io };
+use std::{ fs, cell::RefCell };
 
 use crate::app::App;
 use crate::states::*;
@@ -62,31 +62,20 @@ impl MainView {
                             }
                         },
                         keyboard::KeyCode::Delete => {
-                            let mut error: Option<io::Error> = None;
-                            let mut path: Option<String> = None;
-
-                            let state = app.get_mut_state(app.image_queue).image_queue_mut();
+                            let state = app.get_state(app.image_queue).image_queue();
                             if state.selected_image_index < state.image_infos.len() {
                                 if let Some(x) = state.image_infos.get(state.selected_image_index) {
-                                    path = Some(x.path.clone());
-
                                     if let Err(e) = fs::remove_file(&x.path) {
-                                        error = Some(e);
+                                        app.log(format!("Error deleting {} : {}", x.path, e));
+                                    } else {
+                                        app.log(format!("Deleted {} successfully", x.path));
+                                        app.get_mut_state(app.image_queue)
+                                           .image_queue_mut()
+                                           .delete_current();
                                     }
+                                } else {
+                                    app.log(String::from("Error getting path of current file"));
                                 }
-                            }
-
-                            match path {
-                                Some(x) => {
-                                    match error {
-                                        Some(e) => app.log(format!("Error deleting {} : {}", x, e)),
-                                        None => {
-                                            state.delete_current();
-                                            app.log(format!("Deleted {} successfully", x))
-                                        }
-                                    }
-                                },
-                                None => app.log("Error getting path of current file".to_string())
                             }
                         },
                         _ => ()
@@ -102,7 +91,7 @@ impl MainView {
                                     if !app.does_tag_exist(&character.to_string()) {
                                         app.keyboard_state = KeyboardState::None;
                                         let tag_input_content = MainView::new(AppView::TagInput(TagInputState { 
-                                            tag_input_value: "".to_string(),
+                                            tag_input_value: RefCell::new(String::from("")),
                                             tag: character
                                         }));
 
@@ -120,28 +109,28 @@ impl MainView {
                                     match character {
                                         '[' => {
                                             if let Some(x) = state.image_infos
-                                                                    .prev(state.selected_image_index,
+                                                                  .prev(state.selected_image_index,
                                                                           |x| x.tags.is_empty()) {
                                                 state.selected_image_index = x;
                                             }
                                         },
                                         ']' => {
                                             if let Some(x) = state.image_infos
-                                                                    .next(state.selected_image_index,
+                                                                  .next(state.selected_image_index,
                                                                           |x| x.tags.is_empty()) {
                                                 state.selected_image_index = x;
                                             }
                                         },
                                         '{' => {
                                             if let Some(x) = state.image_infos
-                                                                    .prev(state.selected_image_index,
+                                                                  .prev(state.selected_image_index,
                                                                           |x| !x.tags.is_empty()) {
                                                 state.selected_image_index = x;
                                             }
                                         },
                                         '}' => {
                                             if let Some(x) = state.image_infos
-                                                                    .next(state.selected_image_index,
+                                                                  .next(state.selected_image_index,
                                                                           |x| !x.tags.is_empty()) {
                                                 state.selected_image_index = x;
                                             }

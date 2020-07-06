@@ -1,6 +1,6 @@
 use iced::{ Scrollable, scrollable, Length, 
             Row, Container, Element, Align, Text };
-use std::{ collections::HashMap };
+use std::{ collections::HashMap, cell::RefCell };
 
 use crate::states::Message;
 use crate::style;
@@ -8,17 +8,22 @@ use crate::style;
 #[derive(Debug)]
 pub struct SidePanelState { 
     pub label: String,
-    pub tags: HashMap<String, String>
+    pub tags: RefCell<HashMap<String, String>>
 }
 
 
 impl SidePanelState {
+    pub fn insert(self: &Self, tag: String, value: String) {
+        self.tags.borrow_mut()
+                 .insert(tag, value);
+    }
+
     pub fn view<'a>(self: &Self, scroll: &'a mut scrollable::State) -> Element<'a, Message> {
         let mut scrollable = Scrollable::new(scroll)
             .align_items(Align::Start)
             .push(Text::new(self.label.to_string()).size(30));
 
-        for x in self.tags.iter() {
+        for x in self.tags.borrow().iter() {
             let mut viewable_text = String::from(x.0);
             viewable_text.push_str(" - "); 
             viewable_text.push_str(x.1); 

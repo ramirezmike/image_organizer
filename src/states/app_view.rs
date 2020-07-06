@@ -16,13 +16,6 @@ impl AppView {
         }
     }
 
-    pub fn side_panel_mut(self: &mut Self) -> &mut SidePanelState {
-        match self {
-            AppView::SidePanel(x) => x,
-            _ => panic!("Incorrect variant requested")
-        }
-    }
-
     pub fn image_queue(self: &Self) -> &ImageQueueState {
         match self {
             AppView::ImageQueue(x) => x,
@@ -30,7 +23,7 @@ impl AppView {
         }
     }
 
-    pub fn tag_input_mut(self: &mut Self) -> &mut TagInputState {
+    pub fn tag_input(self: &Self) -> &TagInputState {
         match self {
             AppView::TagInput(x) => x,
             _ => panic!("Incorrect variant requested")

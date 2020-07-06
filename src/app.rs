@@ -56,7 +56,7 @@ impl App {
         store = image_queue.image_infos.iter().fold(store, |mut acc, image_info| {
             for tag in image_info.tags.iter() {
                 let tag = &tag.0.to_string();
-                if let Some(tag_label) = side_panel.tags.get(tag) {
+                if let Some(tag_label) = side_panel.tags.borrow().get(tag) {
                     if !acc.contains_key(tag_label) {
                         acc.insert(tag_label.to_string(), Vec::<String>::new());
                     }
@@ -82,8 +82,6 @@ impl App {
             for file in &store[key] {
                 let mut source = current_dir.clone();
                 source.push(file);
-                println!("Moving {}", &(key.to_string() + "||" + file));
-                println!("to {}", &(key.to_string() + "/" + file));
                 match self.organize_mode {
                     OrganizeMode::Copy => {
                         match fs::copy(source, &(key.to_string() + "/" + file)) {
@@ -162,6 +160,7 @@ impl App {
         self.get_state(self.side_panel)
             .side_panel()
             .tags
+            .borrow()
             .contains_key(key)
     }
 }
@@ -188,7 +187,7 @@ impl Application for App {
 
         let pane_content = MainView::new(AppView::SidePanel(SidePanelState {
             label: String::from("Tags"),
-            tags: HashMap::<String,String>::new()
+            tags: RefCell::new(HashMap::<String,String>::new())
         }));
         let image_queue_content = MainView::new(AppView::ImageQueue(ImageQueueState::new()));
         let image_display_content = MainView::new(AppView::ImageDisplay(ImageDisplayState {
@@ -235,28 +234,22 @@ impl Application for App {
             Message::TextInputChanged(text) => {
                 match self.tag_input {
                     Some(tag_input) => {
-                        let state = self.get_mut_state(tag_input).tag_input_mut();
-                        state.tag_input_value = text;
+                        self.get_state(tag_input)
+                            .tag_input()
+                            .set(text);
                     },
                     None => ()
                 }
             }
             Message::TextInputSubmitted => {
-                let mut submitted_value: String = "Error getting submitted value".to_string();
-                let mut submitted_tag: String = "Error getting tag".to_string();
-                match self.tag_input {
-                    Some(tag_input) => {
-                        let state = self.get_mut_state(tag_input).tag_input_mut();
-                        submitted_value = state.tag_input_value.clone();
-                        submitted_tag = state.tag.to_string();
-                        state.tag_input_value = "".to_string();
-                        self.pane_state.close(&tag_input);
-                    },
-                    _ => ()
+                if let Some(tag_input) = self.tag_input {
+                    let state = self.get_state(tag_input).tag_input();
+                    self.get_state(self.side_panel)
+                        .side_panel()
+                        .insert(state.tag.to_string(), state.tag_input_value.borrow().clone());
+                    state.set(String::from(""));
+                    self.pane_state.close(&tag_input);
                 }
-
-                let state = self.get_mut_state(self.side_panel).side_panel_mut();
-                state.tags.insert(submitted_tag, submitted_value);
 
                 self.keyboard_state = KeyboardState::Tagging;
                 self.tag_input = None;
