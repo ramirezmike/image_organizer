@@ -38,13 +38,13 @@ impl App {
 
     pub fn get_mut_state(self: &mut Self, pane: pane_grid::Pane) -> &mut AppView {
         &mut self.pane_state.get_mut(&pane)
-                            .expect("Image Queue State missing")
+                            .expect("State missing")
                             .app_view
     }
 
     pub fn get_state(self: &Self, pane: pane_grid::Pane) -> &AppView {
         &self.pane_state.get(&pane)
-                        .expect("Image Queue State missing")
+                        .expect("State missing")
                         .app_view
     }
 
@@ -54,9 +54,8 @@ impl App {
 
         let mut store = HashMap::<String, Vec::<String>>::new();
         store = image_queue.image_infos.iter().fold(store, |mut acc, image_info| {
-            for tag in image_info.tags.iter() {
-                let tag = &tag.0.to_string();
-                if let Some(tag_label) = side_panel.tags.borrow().get(tag) {
+            for (tag, _) in image_info.tags.iter() {
+                if let Some(tag_label) = side_panel.tags.borrow().get(&tag.to_string()) {
                     if !acc.contains_key(tag_label) {
                         acc.insert(tag_label.to_string(), Vec::<String>::new());
                     }
@@ -183,7 +182,7 @@ impl Application for App {
         }
 
         assert!(env::set_current_dir(&PathBuf::from(&working_directory)).is_ok());
-        let working_directory: Rc::<RefCell::<String>> = Rc::new(RefCell::new(working_directory));
+        let working_directory = Rc::new(RefCell::new(working_directory));
 
         let pane_content = MainView::new(AppView::SidePanel(SidePanelState {
             label: String::from("Tags"),

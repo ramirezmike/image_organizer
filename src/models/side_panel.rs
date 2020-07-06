@@ -11,7 +11,6 @@ pub struct SidePanelState {
     pub tags: RefCell<HashMap<String, String>>
 }
 
-
 impl SidePanelState {
     pub fn insert(self: &Self, tag: String, value: String) {
         self.tags.borrow_mut()
